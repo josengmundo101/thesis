@@ -1,12 +1,13 @@
 <script setup>
 import signUpImage from '@/assets/images/Work time-amico.svg'
+import AdminLoginForm from '@/components/auth/AdminLoginForm.vue'
 </script>
 
 <template>
   <v-container fluid class="fill-height">
-    <v-row align="center" justify="center" class="fill-height">
+    <v-row align="center" justify="center" class="fill-height mx-auto my-auto">
       <v-col cols="12" sm="10">
-        <v-card class="elevation-6 mt-10 bg-green-lighten-5">
+        <v-card class="elevation-6 mt-10 mx-auto my-auto bg-green-lighten-5">
           <v-row no-gutters>
             <!-- Left Column (Full Image) -->
             <v-col
@@ -30,22 +31,7 @@ import signUpImage from '@/assets/images/Work time-amico.svg'
 
                 <v-row align="center" justify="center">
                   <v-col cols="12" sm="8">
-                    <v-text-field
-                      label="Email Address"
-                      outlined
-                      dense
-                      color="blue"
-                      class="mt-4"
-                      type="email"
-                    />
-                    <v-text-field label="Password" outlined dense color="blue" type="password" />
-
-                    <div class="d-flex justify-space-between align-center">
-                      <v-checkbox label="Remember Me" class="mt-n1" color="blue"></v-checkbox>
-                      <a href="#" class="text-blue">Forgot Password?</a>
-                    </div>
-
-                    <v-btn class="mb-5" color="blue" dark block tile>Log in</v-btn>
+                    <AdminLoginForm />
                   </v-col>
                 </v-row>
               </v-card-text>

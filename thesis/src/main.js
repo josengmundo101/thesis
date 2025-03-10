@@ -9,6 +9,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 import App from './App.vue'
+import './index.css'
 import router from './router'
 
 const app = createApp(App)
@@ -17,6 +18,13 @@ const vuetify = createVuetify({
   icons: {
     defaultSet: 'mdi',
     iconFont: ['md', 'fa'],
+  },
+  defaults: {
+    global: {
+      style: {
+        fontFamily: 'Poppins, sans-serif',
+      },
+    },
   },
   components,
   directives,
