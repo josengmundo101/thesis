@@ -4,10 +4,10 @@ import TenantLoginForm from '@/components/auth/TenantLoginForm.vue'
 </script>
 
 <template>
-  <v-container fluid class="fill-height">
+  <v-container fluid class="gradient-background fill-height">
     <v-row align="center" justify="center" class="fill-height mx-auto my-auto">
       <v-col cols="12" sm="10">
-        <v-card class="elevation-12 mt-10 mx-auto my-auto bg-green-lighten-5">
+        <v-card class="elevation-12 mt-10 mx-auto my-auto">
           <v-row no-gutters>
             <!-- Left Column (Full Image) -->
             <v-col

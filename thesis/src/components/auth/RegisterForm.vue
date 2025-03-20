@@ -33,7 +33,7 @@
     </v-col>
 
     <v-col cols="12">
-      <v-btn class="my-auto mx-auto" color="blue" dark block tile>Sign up</v-btn>
+      <v-btn class="my-auto mx-auto" color="#578e7e" dark block tile>Sign up</v-btn>
     </v-col>
   </v-row>
 </template>

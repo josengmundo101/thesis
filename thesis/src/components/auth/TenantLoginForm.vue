@@ -9,7 +9,7 @@
     <a href="#" class="text-blue">Forgot Password?</a>
   </div>
 
-  <v-btn class="mb-5" color="blue" dark block tile>Log in</v-btn>
+  <v-btn class="mb-5" color="#578e7e" dark block tile>Log in</v-btn>
 
   <p class="text-center text-caption">
     Don't have an account?
