@@ -28,7 +28,11 @@ const tenantPayments = computed(() =>
       </v-col>
     </v-row>
 
-    <v-card class="payment-history-card elevation-2 mt-10" justify="center" align="center">
+    <v-card
+      class="payment-history-card elevation-2 mt-10 fade-in delay-100"
+      justify="center"
+      align="center"
+    >
       <v-card-title class="d-flex align-center">
         <v-icon color="primary" class="mr-2">mdi-history</v-icon>
         <span class="text-h6 font-weight-bold">My Payment History</span>

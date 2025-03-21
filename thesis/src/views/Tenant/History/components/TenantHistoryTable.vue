@@ -16,7 +16,7 @@ const formatCurrency = (value) => {
 </script>
 
 <template>
-  <v-table v-if="payments.length > 0" class="modern-table">
+  <v-table v-if="payments.length > 0" class="modern-table fade-in delay-100">
     <thead>
       <tr>
         <th class="text-left">Amount Paid</th>
