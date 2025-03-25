@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
 import { useToast } from 'vue-toastification'
 import SearchBar from './components/SearchBar.vue'
 import TenantTable from './components/TenantTable.vue'
@@ -7,104 +8,100 @@ import ViewDetails from './components/ViewDetails.vue'
 import AssignRoom from './components/AssignRoom.vue'
 
 const toast = useToast()
-
-// Tenant data
-const tenants = ref([
-  {
-    id: 1,
-    name: 'John Doe',
-    email: 'john@example.com',
-    room: '101 - Garden View',
-    status: 'Paid',
-    address: '123 Main Street',
-    contactNumber: '(555) 123-4567',
-  },
-  {
-    id: 2,
-    name: 'Jane Smith',
-    email: 'jane@example.com',
-    room: '',
-    status: 'Pending',
-    address: '456 Oak Avenue',
-    contactNumber: '(555) 987-6543',
-  },
-  {
-    id: 3,
-    name: 'Robert Johnson',
-    email: 'robert@example.com',
-    room: '202 - Pool View',
-    status: 'Paid',
-    address: '789 Pine Road',
-    contactNumber: '(555) 456-7890',
-  },
-  {
-    id: 4,
-    name: 'Emily Davis',
-    email: 'emily@example.com',
-    room: '301 - Ocean View',
-    status: 'Paid',
-    address: '321 Cedar Lane',
-    contactNumber: '(555) 234-5678',
-  },
-  {
-    id: 5,
-    name: 'Michael Wilson',
-    email: 'michael@example.com',
-    room: '',
-    status: 'Pending',
-    address: '654 Maple Street',
-    contactNumber: '(555) 876-5432',
-  },
-])
-
+const tenants = ref([])
+const loading = ref(false)
+const errorMessage = ref('')
 const searchQuery = ref('')
 const currentPage = ref(1)
 const selectedTenant = ref(null)
 const detailsModalOpen = ref(false)
 const assignModalOpen = ref(false)
-const loading = ref(true)
 const ITEMS_PER_PAGE = 5
 
-// Simulated loading effect
-onMounted(() => {
-  setTimeout(() => {
+// 🔍 Fetch tenants from Supabase where role = 'tenant'
+const fetchTenants = async () => {
+  loading.value = true
+  try {
+    // Fetch tenants with bed_assignment and rooms
+    const { data, error } = await supabase
+      .from('users')
+      .select(
+        `
+        *,
+        bed_assignment (
+          bed_side,
+          rooms (
+            room_number
+          )
+        )
+      `,
+      )
+      .eq('role', 'tenant')
+
+    if (error) throw error
+
+    tenants.value = data
+    console.log('Fetched Tenants:', tenants.value)
+  } catch (error) {
+    console.error('Error fetching tenants:', error.message)
+    errorMessage.value = 'Failed to load tenants. Please try again later.'
+  } finally {
     loading.value = false
-  }, 600)
+  }
+}
+
+// 🚀 Fetch tenants on component mount
+onMounted(() => {
+  fetchTenants()
 })
 
-// Computed property for filtered tenants
+// 🔍 Computed property for filtered tenants
 const filteredTenants = computed(() => {
-  return tenants.value.filter(
-    (tenant) =>
-      tenant.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+  if (!searchQuery.value) return tenants.value
+  return tenants.value.filter((tenant) => {
+    const fullName = `${tenant.firstname} ${tenant.lastname}`.toLowerCase()
+    return (
+      fullName.includes(searchQuery.value.toLowerCase()) ||
       tenant.email.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      (tenant.room && tenant.room.toLowerCase().includes(searchQuery.value.toLowerCase())),
-  )
+      (tenant?.bed_assignment?.rooms?.room_number &&
+        tenant.bed_assignment.rooms.room_number
+          .toLowerCase()
+          .includes(searchQuery.value.toLowerCase()))
+    )
+  })
 })
 
-// Handlers for modals
+// 🔑 Handle viewing tenant details
 const handleViewDetails = (tenant) => {
   selectedTenant.value = tenant
+  console.log('📜 Selected Tenant for Details:', selectedTenant.value)
   detailsModalOpen.value = true
 }
 
+// 🏠 Handle room assignment
 const handleAssignRoom = (tenant) => {
   selectedTenant.value = tenant
+  console.log('🏡 Assign Room to Tenant:', tenant)
   assignModalOpen.value = true
 }
 
+// 🔄 Update tenant data after room assignment
 const handleUpdateTenant = (updatedTenant) => {
-  const index = tenants.value.findIndex((t) => t.id === updatedTenant.id)
+  const index = tenants.value.findIndex((t) => t.user_id === updatedTenant.user_id)
   if (index !== -1) {
-    tenants.value[index] = updatedTenant
-    toast.success(`Room assigned to ${updatedTenant.name}`)
+    tenants.value[index] = { ...tenants.value[index], ...updatedTenant }
+    toast.success(`✅ Room assigned to ${updatedTenant.firstname} ${updatedTenant.lastname}`)
+  } else {
+    // Fallback: Re-fetch if tenant is not found
+    toast.info('🔄 Refetching tenant list for latest data...')
+    fetchTenants()
   }
 }
 </script>
 
 <template>
   <v-container class="py-8">
-    <!-- Page Header -->
+    <!-- 🔷 Page Header -->
     <div class="dashboard-overview mt-6 mb-8">
       <h1 class="text-h4 font-weight-bold tracking-tight fade-in delay-50">Tenant Management</h1>
       <p class="text-body-2 text-grey-darken-1 max-width fade-in delay-100">
@@ -112,14 +109,14 @@ const handleUpdateTenant = (updatedTenant) => {
       </p>
     </div>
 
-    <!-- Search Bar -->
+    <!-- 🔍 Search Bar -->
     <v-row class="mb-4">
       <v-col cols="12" sm="6">
         <SearchBar v-model="searchQuery" placeholder="Search tenants by name, email, or room..." />
       </v-col>
     </v-row>
 
-    <!-- Tenant Table -->
+    <!-- 📊 Tenant Table -->
     <v-row>
       <v-col>
         <TenantTable
@@ -133,12 +130,27 @@ const handleUpdateTenant = (updatedTenant) => {
       </v-col>
     </v-row>
 
-    <!-- Modals -->
+    <!-- 🏷️ Display loading or error states -->
+    <v-progress-circular
+      v-if="loading"
+      indeterminate
+      color="primary"
+      size="64"
+      class="my-5 mx-auto"
+    ></v-progress-circular>
+
+    <v-alert v-if="errorMessage" type="error" class="my-4">
+      {{ errorMessage }}
+    </v-alert>
+
+    <!-- 🔍 View Details Modal -->
     <ViewDetails
       :model-value="detailsModalOpen"
       @update:model-value="detailsModalOpen = $event"
       :tenant="selectedTenant"
     />
+
+    <!-- 🏠 Assign Room Modal -->
     <AssignRoom
       :model-value="assignModalOpen"
       @update:model-value="assignModalOpen = $event"
@@ -149,12 +161,36 @@ const handleUpdateTenant = (updatedTenant) => {
 </template>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s;
+.dashboard-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 600px;
 }
-.fade-enter,
-.fade-leave-to {
+
+/* Fade-in Animations */
+.fade-in {
   opacity: 0;
+  transform: translateY(10px);
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.delay-50 {
+  animation-delay: 50ms;
+}
+
+.delay-100 {
+  animation-delay: 100ms;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

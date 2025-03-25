@@ -30,15 +30,15 @@ const closeModal = () => {
   dialogVisible.value = false
 }
 
-// Computed initials for avatar
-const tenantInitials = computed(() =>
-  props.tenant?.name
-    ? props.tenant.name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-    : '',
-)
+// Computed for room assignment details
+const roomAssignment = computed(() => {
+  const assignment = props.tenant?.bed_assignment?.[0] // Get the first assignment
+  if (!assignment) return 'Not assigned'
+
+  const roomNumber = assignment?.rooms?.room_number || 'N/A'
+  const bedSide = assignment?.bed_side || 'N/A'
+  return `Room ${roomNumber} — ${bedSide.charAt(0).toUpperCase() + bedSide.slice(1)}`
+})
 </script>
 
 <template>
@@ -55,12 +55,9 @@ const tenantInitials = computed(() =>
       <!-- Tenant Info -->
       <v-card-text>
         <div class="d-flex align-center mb-4">
-          <div class="avatar">
-            <span class="text-h5 font-weight-medium text-primary">{{ tenantInitials }}</span>
-          </div>
           <div class="ml-4">
-            <h3 class="text-h6 font-weight-medium">{{ tenant.name }}</h3>
-            <p class="text-caption text-grey-darken-1">Tenant ID: {{ tenant.id }}</p>
+            <h3 class="text-h6 font-weight-medium">{{ tenant.firstname }} {{ tenant.lastname }}</h3>
+            <p class="text-caption text-grey-darken-1">Tenant ID: {{ tenant.custom_id }}</p>
           </div>
         </div>
 
@@ -76,7 +73,7 @@ const tenantInitials = computed(() =>
             <template #prepend><v-icon color="primary">mdi-phone</v-icon></template>
             <v-list-item-title>Contact</v-list-item-title>
             <v-list-item-subtitle>{{
-              tenant.contactNumber || 'Not provided'
+              tenant.contact_number || 'Not provided'
             }}</v-list-item-subtitle>
           </v-list-item>
 
@@ -89,7 +86,7 @@ const tenantInitials = computed(() =>
           <v-list-item>
             <template #prepend><v-icon color="primary">mdi-home</v-icon></template>
             <v-list-item-title>Room Assignment</v-list-item-title>
-            <v-list-item-subtitle>{{ tenant.room || 'Not assigned' }}</v-list-item-subtitle>
+            <v-list-item-subtitle>{{ roomAssignment }}</v-list-item-subtitle>
           </v-list-item>
 
           <v-list-item>

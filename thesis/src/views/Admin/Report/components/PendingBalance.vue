@@ -1,78 +1,73 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
 
-const pendingBalances = ref([
-  {
-    id: 1,
-    name: 'John Doe',
-    room: 101,
-    amountDue: 5000,
-    dueDate: 'Jan 31',
-    status: 'Pending',
-    days: 5,
-  },
-  {
-    id: 2,
-    name: 'Jane Smith',
-    room: 204,
-    amountDue: 2500,
-    dueDate: 'Jan 25',
-    status: 'Overdue',
-    days: 12,
-  },
-  {
-    id: 3,
-    name: 'Michael Johnson',
-    room: 305,
-    amountDue: 3800,
-    dueDate: 'Feb 5',
-    status: 'Pending',
-    days: 10,
-  },
-  {
-    id: 4,
-    name: 'Emily Williams',
-    room: 102,
-    amountDue: 4200,
-    dueDate: 'Jan 20',
-    status: 'Overdue',
-    days: 17,
-  },
-  {
-    id: 5,
-    name: 'Robert Brown',
-    room: 208,
-    amountDue: 1900,
-    dueDate: 'Feb 10',
-    status: 'Pending',
-    days: 15,
-  },
-])
+// Reactive State
+const pendingBalances = ref([])
+const loading = ref(true)
+const errorMessage = ref('')
 
+// 🟢 Fetch Pending Balances (Join invoices & users)
+const fetchPendingBalances = async () => {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    // Fetch data with join on users
+    const { data, error } = await supabase.from('invoices').select(`
+        invoice_id,
+        total_amount,
+        outstanding_balance,
+        due_date,
+        status,
+        user_id,
+        users (firstname, lastname, room_id)
+      `)
+
+    if (error) throw error
+
+    // Map through data to format the result
+    pendingBalances.value = data.map((item) => ({
+      id: item.invoice_id,
+      name: `${item.users.firstname} ${item.users.lastname}`,
+      room: item.users.room_id || 'N/A', // Adjust this based on your schema
+      amountDue: item.outstanding_balance,
+      dueDate: new Date(item.due_date).toLocaleDateString(),
+      status: item.status,
+      days: calculateOverdueDays(item.due_date),
+    }))
+  } catch (error) {
+    console.error('Error fetching data:', error.message)
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+// 🟢 Function to calculate overdue days
+const calculateOverdueDays = (dueDate) => {
+  const today = new Date()
+  const due = new Date(dueDate)
+  const diffTime = today - due
+  return diffTime > 0 ? Math.floor(diffTime / (1000 * 60 * 60 * 24)) : 0
+}
+
+// 🟢 Total Outstanding
 const totalPending = computed(() =>
   pendingBalances.value.reduce((sum, item) => sum + item.amountDue, 0),
 )
 
+// 🟢 Count Overdue
 const overdueCount = computed(
   () => pendingBalances.value.filter((item) => item.status === 'Overdue').length,
 )
 
+// 🟢 Count Pending
 const pendingCount = computed(
   () => pendingBalances.value.filter((item) => item.status === 'Pending').length,
 )
 
-const formatCurrency = (value) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-  }).format(value)
-}
-
-const getStatusColor = (status) => {
-  return status === 'Overdue' ? 'error' : 'warning'
-}
-
+// 🟢 Handle Sorting
 const searchQuery = ref('')
 const sortBy = ref('dueDate')
 const sortDesc = ref(false)
@@ -80,7 +75,7 @@ const sortDesc = ref(false)
 const filteredBalances = computed(() => {
   let result = [...pendingBalances.value]
 
-  // Apply search filter
+  // Search Filter
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(
@@ -88,7 +83,7 @@ const filteredBalances = computed(() => {
     )
   }
 
-  // Apply sorting
+  // Sorting
   result.sort((a, b) => {
     let aValue = a[sortBy.value]
     let bValue = b[sortBy.value]
@@ -99,10 +94,10 @@ const filteredBalances = computed(() => {
       return sortDesc.value ? bValue - aValue : aValue - bValue
     }
   })
-
   return result
 })
 
+// Sorting Function
 const toggleSort = (column) => {
   if (sortBy.value === column) {
     sortDesc.value = !sortDesc.value
@@ -116,38 +111,33 @@ const getSortIcon = (column) => {
   if (sortBy.value !== column) return 'mdi-unfold-more-horizontal'
   return sortDesc.value ? 'mdi-sort-descending' : 'mdi-sort-ascending'
 }
+
+// Fetch data on mount
+onMounted(() => {
+  fetchPendingBalances()
+})
 </script>
 
 <template>
   <v-card class="pending-balance-card elevation-1" rounded="lg">
-    <v-card-item>
-      <template v-slot:prepend>
-        <v-icon color="error" icon="mdi-clock-alert" size="large" class="mr-2"></v-icon>
-      </template>
-      <v-card-title class="text-h5 font-weight-bold">Pending Balances</v-card-title>
-      <template v-slot:append>
-        <v-btn variant="text" prepend-icon="mdi-printer" color="grey-darken-1" size="small">
-          Print
-        </v-btn>
-      </template>
-    </v-card-item>
+    <v-card-title class="text-h5 font-weight-bold">Pending Balances</v-card-title>
 
-    <v-divider class="mx-4"></v-divider>
+    <v-divider></v-divider>
 
     <v-card-text>
-      <!-- Stats overview -->
-      <div class="d-flex flex-wrap gap-4 my-4">
+      <v-progress-circular v-if="loading" indeterminate color="primary" />
+      <v-alert v-if="errorMessage" type="error">{{ errorMessage }}</v-alert>
+
+      <!-- Stats Overview -->
+      <div v-if="!loading && !errorMessage" class="d-flex flex-wrap gap-4 my-4">
         <v-sheet
           rounded="xl"
           elevation="1"
           class="pa-4 flex-grow-1 bg-primary-lighten-5 d-flex align-center"
         >
-          <v-avatar color="primary" class="mr-3">
-            <v-icon color="white">mdi-currency-usd</v-icon>
-          </v-avatar>
           <div>
             <div class="text-caption text-medium-emphasis">Total Outstanding</div>
-            <div class="text-h5 font-weight-bold">{{ formatCurrency(totalPending) }}</div>
+            <div class="text-h5 font-weight-bold">₱{{ totalPending }}</div>
           </div>
         </v-sheet>
 
@@ -156,9 +146,6 @@ const getSortIcon = (column) => {
           elevation="1"
           class="pa-4 flex-grow-1 bg-error-lighten-5 d-flex align-center"
         >
-          <v-avatar color="error" class="mr-3">
-            <v-icon color="white">mdi-alert-circle</v-icon>
-          </v-avatar>
           <div>
             <div class="text-caption text-medium-emphasis">Overdue Payments</div>
             <div class="text-h5 font-weight-bold">{{ overdueCount }}</div>
@@ -170,9 +157,6 @@ const getSortIcon = (column) => {
           elevation="1"
           class="pa-4 flex-grow-1 bg-warning-lighten-5 d-flex align-center"
         >
-          <v-avatar color="warning" class="mr-3">
-            <v-icon color="white">mdi-timer-sand</v-icon>
-          </v-avatar>
           <div>
             <div class="text-caption text-medium-emphasis">Pending Payments</div>
             <div class="text-h5 font-weight-bold">{{ pendingCount }}</div>
@@ -180,119 +164,24 @@ const getSortIcon = (column) => {
         </v-sheet>
       </div>
 
-      <!-- Search and actions -->
-      <div class="d-flex align-center mb-4">
-        <v-spacer></v-spacer>
-
-        <v-btn
-          color="success"
-          prepend-icon="mdi-send-check"
-          variant="tonal"
-          size="small"
-          class="ml-2"
-        >
-          Send Reminders
-        </v-btn>
-      </div>
-
       <!-- Table -->
-      <v-table class="rounded-lg balance-table">
+      <v-table v-if="!loading && !errorMessage" class="rounded-lg balance-table">
         <thead>
-          <tr class="text-grey bg-grey-lighten-4">
-            <th @click="toggleSort('name')" class="cursor-pointer">
-              <div class="d-flex align-center">
-                Tenant Name
-                <v-icon size="small" class="ml-1">{{ getSortIcon('name') }}</v-icon>
-              </div>
-            </th>
-            <th @click="toggleSort('room')" class="cursor-pointer">
-              <div class="d-flex align-center">
-                Room #
-                <v-icon size="small" class="ml-1">{{ getSortIcon('room') }}</v-icon>
-              </div>
-            </th>
-            <th @click="toggleSort('amountDue')" class="cursor-pointer">
-              <div class="d-flex align-center">
-                Amount Due
-                <v-icon size="small" class="ml-1">{{ getSortIcon('amountDue') }}</v-icon>
-              </div>
-            </th>
-            <th @click="toggleSort('dueDate')" class="cursor-pointer">
-              <div class="d-flex align-center">
-                Due Date
-                <v-icon size="small" class="ml-1">{{ getSortIcon('dueDate') }}</v-icon>
-              </div>
-            </th>
-            <th @click="toggleSort('status')" class="cursor-pointer">
-              <div class="d-flex align-center">
-                Status
-                <v-icon size="small" class="ml-1">{{ getSortIcon('status') }}</v-icon>
-              </div>
-            </th>
-            <th>Actions</th>
+          <tr>
+            <th @click="toggleSort('name')">Tenant Name</th>
+            <th @click="toggleSort('room')">Room #</th>
+            <th @click="toggleSort('amountDue')">Amount Due</th>
+            <th @click="toggleSort('dueDate')">Due Date</th>
+            <th @click="toggleSort('status')">Status</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in filteredBalances" :key="item.id" class="balance-row">
-            <td class="font-weight-medium">
-              <div class="d-flex align-center">
-                <v-avatar size="32" color="grey-lighten-3" class="mr-2">
-                  <span class="text-caption">{{
-                    item.name
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                  }}</span>
-                </v-avatar>
-                {{ item.name }}
-              </div>
-            </td>
-            <td>
-              <v-chip
-                size="small"
-                color="grey-lighten-3"
-                variant="tonal"
-                class="font-weight-medium"
-              >
-                {{ item.room }}
-              </v-chip>
-            </td>
-            <td class="font-weight-medium">{{ formatCurrency(item.amountDue) }}</td>
-            <td>
-              <div class="d-flex align-center">
-                <v-icon :color="getStatusColor(item.status)" size="small" class="mr-1">
-                  {{ item.status === 'Overdue' ? 'mdi-calendar-alert' : 'mdi-calendar-clock' }}
-                </v-icon>
-                {{ item.dueDate }}
-              </div>
-            </td>
-            <td>
-              <v-chip
-                size="small"
-                :color="getStatusColor(item.status)"
-                variant="tonal"
-                :prepend-icon="item.status === 'Overdue' ? 'mdi-alert-circle' : 'mdi-clock-outline'"
-              >
-                {{ item.status }}
-                <span v-if="item.days" class="ml-1 text-caption">({{ item.days }} days)</span>
-              </v-chip>
-            </td>
-            <td>
-              <div class="d-flex">
-                <v-btn size="small" icon variant="text" color="primary">
-                  <v-icon size="small">mdi-message-text-outline</v-icon>
-                  <v-tooltip activator="parent" location="top">Send reminder</v-tooltip>
-                </v-btn>
-                <v-btn size="small" icon variant="text" color="success">
-                  <v-icon size="small">mdi-cash-register</v-icon>
-                  <v-tooltip activator="parent" location="top">Record payment</v-tooltip>
-                </v-btn>
-                <v-btn size="small" icon variant="text" color="grey">
-                  <v-icon size="small">mdi-dots-vertical</v-icon>
-                  <v-tooltip activator="parent" location="top">More options</v-tooltip>
-                </v-btn>
-              </div>
-            </td>
+          <tr v-for="item in filteredBalances" :key="item.id">
+            <td>{{ item.name }}</td>
+            <td>{{ item.room }}</td>
+            <td>₱{{ item.amountDue }}</td>
+            <td>{{ item.dueDate }}</td>
+            <td>{{ item.status }}</td>
           </tr>
         </tbody>
       </v-table>

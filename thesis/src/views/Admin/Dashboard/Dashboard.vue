@@ -1,3 +1,34 @@
+<script setup>
+import { ref, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
+import StatCard from './components/StatCard.vue'
+import PendingConfirmedChart from './components/PendingConfirmedChart.vue'
+import RevenueChart from './components/RevenueChart.vue'
+import MonthlyRevenue from './components/MonthlyRevenue.vue'
+
+//State Variable
+const totalTenants = ref(0)
+
+//Fetch Tenants from Supabase
+const fetchTenants = async () => {
+  try {
+    const { data, error } = await supabase.from('users').select('*').eq('role', 'tenant')
+
+    if (error) throw error
+
+    totalTenants.value = data.length
+    console.log('Total Tenants:', totalTenants.value)
+  } catch (error) {
+    console.log('Error Fetching tenants', error.message)
+  }
+}
+
+// Fetch tenants when the component is mounted
+onMounted(() => {
+  fetchTenants()
+})
+</script>
+
 <template>
   <v-container fluid>
     <div class="dashboard-overview mt-6 mb-8">
@@ -9,7 +40,7 @@
 
     <v-row dense>
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="users" value="35" label="Total tenants" />
+        <StatCard color="white" flat icon="users" :value="totalTenants" label="Total tenants" />
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
@@ -41,13 +72,6 @@
     </v-row>
   </v-container>
 </template>
-
-<script setup>
-import StatCard from './components/StatCard.vue'
-import PendingConfirmedChart from './components/PendingConfirmedChart.vue'
-import RevenueChart from './components/RevenueChart.vue'
-import MonthlyRevenue from './components/MonthlyRevenue.vue'
-</script>
 
 <style setup>
 .dashboard-overview {

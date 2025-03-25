@@ -1,17 +1,27 @@
 <script setup>
-import { ref } from 'vue'
+import { useUtilityStore } from '@/stores/useUtilityStore'
 
-const waterBill = ref(500) // Default water bill
+const store = useUtilityStore()
+
+const updateWater = (value) => {
+  store.updateUtility('water', Number(value))
+}
 </script>
 
 <template>
   <v-card class="utility-card" flat>
     <v-card-title class="d-flex align-center">
-      <v-icon color="blue" class="mr-2">mdi-water</v-icon>
+      <v-icon color="amber" class="mr-2">mdi-lightning-bolt</v-icon>
       Water Settings
     </v-card-title>
     <v-card-text>
-      <v-text-field v-model="waterBill" label="Water Bill (₱)" type="number" variant="outlined" />
+      <v-text-field
+        :value="store.water"
+        label="Water Bill (₱)"
+        type="number"
+        variant="outlined"
+        @input="updateWater($event)"
+      />
     </v-card-text>
   </v-card>
 </template>

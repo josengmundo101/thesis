@@ -1,13 +1,17 @@
 <script setup>
 import { ref } from 'vue'
-import { signIn } from '@/api/auth' // Import Supabase login function
-import { requiredValidator, emailValidator } from '../../utils/validators' // Import validators
+import { supabase } from '@/utils/supabase' // Import Supabase
+import { useRouter } from 'vue-router' // Import router
+import { requiredValidator, emailValidator } from '@/utils/validators' // Import validators
 
+// Variables
+const router = useRouter()
 const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 
+// Handle Admin Login
 const handleLogin = async () => {
   errorMessage.value = ''
 
@@ -27,13 +31,31 @@ const handleLogin = async () => {
 
   try {
     loading.value = true
-    const { user } = await signIn(email.value, password.value) // Call Supabase login
 
-    if (user) {
-      // Redirect to Admin Dashboard (Replace with your route)
-      window.location.href = '/admin/dashboard'
+    // Step 1: Sign In with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.value,
+      password: password.value,
+    })
+    if (authError) throw authError
+
+    // Step 2: Fetch User Role from 'users' Table
+    const { data: userData, error: fetchError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('user_id', authData.user.id)
+      .single()
+    if (fetchError) throw fetchError
+
+    // Step 3: Check if Role is Admin
+    if (userData.role !== 'admin') {
+      throw new Error('Access denied. Admins only.')
     }
+
+    // Step 4: Redirect to Admin Dashboard
+    router.push('/admin/dashboard')
   } catch (error) {
+    // Handle Errors
     errorMessage.value = error.message || 'Invalid credentials'
   } finally {
     loading.value = false
@@ -67,7 +89,7 @@ const handleLogin = async () => {
     <a href="#" class="text-blue">Forgot Password?</a>
   </div>
 
-  <v-btn :loading="loading" @click="handleLogin" class="mb-5" color="blue" dark block tile>
+  <v-btn :loading="loading" @click="handleLogin" class="mb-5" color="#578e7e" dark block tile>
     Log in
   </v-btn>
 

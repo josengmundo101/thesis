@@ -1,5 +1,11 @@
 import { supabase, formActionDefault } from '@/utils/supabase'
 
+const generateCustomID = (role) => {
+  const prefix = role === 'admin' ? 'ADMIN' : 'TENANT'
+  const timestamp = Date.now().toString().slice(-5) // Get last 5 digits of timestamp
+  return `${prefix}-${timestamp}` // e.g., TENANT-76432
+}
+
 // 🔹 Register User (Creates Admin if First User)
 export const signUp = async (userData) => {
   let action = { ...formActionDefault } // Initialize form state
@@ -15,6 +21,9 @@ export const signUp = async (userData) => {
 
     // Determine role
     const role = count === 0 ? 'admin' : 'tenant'
+
+    // Generate Custom ID (e.g., TENANT-001)
+    const customId = generateCustomID(role, count)
 
     // ✅ Step 1: Sign up user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -33,6 +42,7 @@ export const signUp = async (userData) => {
         address: userData.address,
         contact_number: userData.contact_number,
         role, // Automatically assign role (admin or tenant)
+        custom_id: customId,
       },
     ])
     if (insertError) throw insertError
@@ -71,5 +81,17 @@ export const signIn = async (email, password) => {
     return { ...action }
   } finally {
     action.formProcess = false
+  }
+}
+
+// 🔹 Logout Function
+export const signOut = async () => {
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+    return { success: true }
+  } catch (error) {
+    console.error('Logout Error:', error.message)
+    return { success: false, message: error.message }
   }
 }

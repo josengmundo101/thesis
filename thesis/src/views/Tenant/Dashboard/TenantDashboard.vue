@@ -4,17 +4,6 @@ import BillingCard from './components/BillingCard.vue'
 import SummaryCard from './components/SummaryCard.vue'
 import NotificationCard from './components/NotificationCard.vue'
 
-// Dummy data
-const billing = ref({
-  bills: [
-    { name: 'Rent', amount: 1000, icon: 'mdi-home', color: 'green' },
-    { name: 'Electricity', amount: 1250, icon: 'mdi-lightning-bolt', color: 'amber' },
-    { name: 'Water', amount: 850, icon: 'mdi-water', color: 'blue' },
-    { name: 'Internet', amount: 900, icon: 'mdi-wifi', color: 'indigo' },
-  ],
-  total: 3000,
-})
-
 const summary = ref({
   balance: 3000,
   dueDate: 'Jan 31, 2025',
@@ -41,7 +30,7 @@ const notifications = ref([
     <!-- Billing & Summary Cards -->
     <v-row class="mb-6">
       <v-col cols="12" md="6">
-        <BillingCard :bills="billing.bills" :total="billing.total" />
+        <BillingCard />
       </v-col>
 
       <v-col cols="12" md="6">

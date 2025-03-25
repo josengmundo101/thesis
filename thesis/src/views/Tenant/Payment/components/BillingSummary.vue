@@ -1,14 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue'
-
-const bills = ref([
-  { name: 'Rent', amount: 2000, icon: 'mdi-home', color: 'green' },
-  { name: 'Electricity', amount: 1250, icon: 'mdi-lightning-bolt', color: 'amber' },
-  { name: 'Water', amount: 850, icon: 'mdi-water', color: 'blue' },
-  { name: 'Internet', amount: 900, icon: 'mdi-wifi', color: 'indigo' },
-])
-
-const totalAmount = computed(() => bills.value.reduce((sum, bill) => sum + bill.amount, 0))
+import { useUtilityStore } from '@/stores/useUtilityStore'
+const store = useUtilityStore()
 </script>
 
 <template>
@@ -17,20 +9,36 @@ const totalAmount = computed(() => bills.value.reduce((sum, bill) => sum + bill.
     <v-divider></v-divider>
     <v-card-text>
       <v-list density="compact">
-        <v-list-item v-for="bill in bills" :key="bill.name">
+        <v-list-item>
           <template v-slot:prepend>
-            <v-icon :color="bill.color" class="mr-2">{{ bill.icon }}</v-icon>
+            <v-icon color="amber">mdi-lightning-bolt</v-icon>
           </template>
-          <v-list-item-title>{{ bill.name }}</v-list-item-title>
-          <v-list-item-subtitle class="text-h6 font-weight-bold">{{
-            bill.amount
-          }}</v-list-item-subtitle>
+          <v-list-item-title>Electricity</v-list-item-title>
+          <v-list-item-subtitle class="font-weight-bold text-primary">
+            ₱{{ store.electricity }}
+          </v-list-item-subtitle>
+        </v-list-item>
+
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon color="blue">mdi-water</v-icon>
+          </template>
+          <v-list-item-title>Water</v-list-item-title>
+          <v-list-item-subtitle class="font-weight-bold text-primary">
+            ₱{{ store.water }}
+          </v-list-item-subtitle>
+        </v-list-item>
+
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon color="green">mdi-wifi</v-icon>
+          </template>
+          <v-list-item-title>Internet</v-list-item-title>
+          <v-list-item-subtitle class="font-weight-bold text-primary">
+            ₱{{ store.wifi }}
+          </v-list-item-subtitle>
         </v-list-item>
       </v-list>
-    </v-card-text>
-    <v-divider></v-divider>
-    <v-card-text class="text-h6 font-weight-bold text-primary">
-      Total Due: {{ totalAmount }}
     </v-card-text>
   </v-card>
 </template>

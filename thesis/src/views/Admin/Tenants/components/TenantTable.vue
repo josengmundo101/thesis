@@ -37,7 +37,7 @@ watch(
 // Compute paginated tenants
 const paginatedTenants = computed(() => {
   if (!props.tenants || props.tenants.length === 0) {
-    console.warn('No tenant data found!') // Debugging check
+    console.warn('⚠️ No tenant data found!') // Debugging check
     return []
   }
   const startIndex = (pageNumber.value - 1) * props.itemsPerPage
@@ -54,6 +54,16 @@ const changePage = (newPage) => {
     emit('pageChange', newPage)
   }
 }
+
+// Helper to get room details
+const getRoomDetails = (tenant) => {
+  const bedAssignment = tenant?.bed_assignment?.[0] || null // Access first assignment
+  if (!bedAssignment) return 'Not assigned'
+
+  const roomNumber = bedAssignment?.rooms?.room_number || 'N/A'
+  const bedSide = bedAssignment?.bed_side || 'N/A'
+  return `Room ${roomNumber} — ${bedSide.charAt(0).toUpperCase() + bedSide.slice(1)}`
+}
 </script>
 
 <template>
@@ -61,19 +71,23 @@ const changePage = (newPage) => {
     <v-table v-if="paginatedTenants.length > 0">
       <thead>
         <tr>
-          <th class="text-left">Name</th>
+          <th class="text-left">First Name</th>
+          <th class="text-left">Last Name</th>
           <th class="text-left">Email</th>
-          <th class="text-left">Room</th>
+          <th class="text-left">Room Assignment</th>
           <th class="text-left">Status</th>
           <th class="text-left">Actions</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="tenant in paginatedTenants" :key="tenant.id">
-          <td>{{ tenant.name }}</td>
+        <tr v-for="tenant in paginatedTenants" :key="tenant.user_id">
+          <td>{{ tenant.firstname }}</td>
+          <td>{{ tenant.lastname }}</td>
           <td>{{ tenant.email }}</td>
           <td>
-            <span v-if="tenant.room">{{ tenant.room }}</span>
+            <span v-if="tenant.bed_assignment">
+              {{ getRoomDetails(tenant) }}
+            </span>
             <span v-else class="text-grey-darken-1 italic">Not assigned</span>
           </td>
           <td>

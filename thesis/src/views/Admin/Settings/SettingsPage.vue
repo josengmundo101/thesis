@@ -1,4 +1,5 @@
 <script setup>
+import AddRoom from './components/AddRoom.vue'
 import UtilitySettings from './components/UtilitySettings.vue'
 </script>
 
@@ -13,8 +14,11 @@ import UtilitySettings from './components/UtilitySettings.vue'
     </div>
 
     <v-row>
-      <v-col cols="12">
+      <v-col cols="12" md="8">
         <UtilitySettings />
+      </v-col>
+      <v-col cols="12" md="4">
+        <AddRoom />
       </v-col>
     </v-row>
   </v-container>
