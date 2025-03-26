@@ -61,26 +61,38 @@ export const signUp = async (userData) => {
   }
 }
 
-// 🔹 Sign In Function
+// 🔹 Sign In Function with Detailed Error Messages
 export const signIn = async (email, password) => {
   let action = { ...formActionDefault }
 
   try {
-    action.formProcess = true
+    if (!email || !password) throw new Error('Email and Password are required.')
 
-    // ✅ Log in with Supabase
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
+    if (error) {
+      // Handle Specific Auth Errors
+      if (error.status === 400) {
+        throw new Error('Invalid email or password. Please try again.')
+      } else if (error.status === 429) {
+        throw new Error('Too many login attempts. Please try again later.')
+      } else {
+        throw new Error('An unexpected error occurred. Please try again.')
+      }
+    }
+
+    console.log('✅ Login Success:', data)
     action.formStatus = 200
-    action.formSuccessMessage = 'Login successful.'
+    action.formSuccessMessage = `Welcome back!`
     return { ...action, user: data.user }
   } catch (error) {
+    console.error('🛑 Login Failed:', error.message)
     action.formStatus = 400
-    action.formErrorMessage = error.message || 'Login failed.'
+    action.formErrorMessage = error.message || 'Login failed. Please try again.'
     return { ...action }
-  } finally {
-    action.formProcess = false
   }
 }
 

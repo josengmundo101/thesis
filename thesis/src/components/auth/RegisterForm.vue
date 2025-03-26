@@ -34,22 +34,27 @@ const handleRegister = async () => {
   errorMessage.value = ''
   successMessage.value = ''
 
-  // Validate before submitting
+  // Trim spaces
+  Object.keys(userData.value).forEach((key) => {
+    if (typeof userData.value[key] === 'string') {
+      userData.value[key] = userData.value[key].trim()
+    }
+  })
+
+  // 🔍 Form Validations
   if (!userData.value.firstname || !userData.value.lastname) {
     errorMessage.value = 'First name and Last name are required.'
     return
   }
+
   if (!emailValidator(userData.value.email)) {
     errorMessage.value = 'Please enter a valid email address.'
     return
   }
+
   if (!passwordValidator(userData.value.password)) {
     errorMessage.value =
       'Password must have 8 characters, uppercase, lowercase, number, and special character.'
-    return
-  }
-  if (!confirmedValidator(userData.value.confirmPassword, userData.value.password)) {
-    errorMessage.value = 'Passwords do not match.'
     return
   }
 
@@ -69,6 +74,13 @@ const handleRegister = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// Validator for Confirm Password
+const confirmPasswordValidator = (value) => {
+  if (!value) return 'Confirm password is required.'
+  if (value !== userData.value.password) return 'Passwords do not match.'
+  return true
 }
 </script>
 
@@ -156,7 +168,7 @@ const handleRegister = async () => {
         dense
         color="blue"
         type="password"
-        :rules="[requiredValidator, confirmedValidator]"
+        :rules="[requiredValidator, confirmPasswordValidator]"
       />
     </v-col>
 

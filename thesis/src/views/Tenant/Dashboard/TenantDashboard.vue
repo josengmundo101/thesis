@@ -1,18 +1,70 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
 import BillingCard from './components/BillingCard.vue'
 import SummaryCard from './components/SummaryCard.vue'
 import NotificationCard from './components/NotificationCard.vue'
 
+// Reactive States
 const summary = ref({
-  balance: 3000,
-  dueDate: 'Jan 31, 2025',
+  balance: 0,
+  dueDate: '',
 })
 
-const notifications = ref([
-  'Payment for Dec 2024 was rejected.',
-  'Your next payment is due Jan 31, 2025.',
-])
+const notifications = ref([])
+const tenantName = ref('Tenant') // Default to "Tenant"
+
+// 🔍 Function to fetch logged-in user's details
+const fetchTenantDetails = async () => {
+  try {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) throw new Error('No user is currently logged in.')
+
+    console.log('✅ User ID:', user.id)
+
+    const { data: tenantData, error: tenantError } = await supabase
+      .from('users')
+      .select(
+        `
+        firstname,
+        lastname,
+        invoice_id,
+        invoices (
+          total_amount,
+          outstanding_balance,
+          due_date
+        )
+      `,
+      )
+      .eq('user_id', user.id)
+      .single()
+
+    if (tenantError) throw tenantError
+    console.log('✅ Tenant Data:', tenantData)
+
+    if (tenantData) {
+      tenantName.value = `${tenantData.firstname} ${tenantData.lastname}`
+
+      if (tenantData.invoices) {
+        summary.value = {
+          balance: tenantData.invoices.outstanding_balance,
+          dueDate: new Date(tenantData.invoices.due_date).toLocaleDateString(),
+        }
+      }
+    }
+  } catch (error) {
+    console.error('🛑 Error fetching tenant details:', error.message)
+  }
+}
+
+// 🚀 Fetch tenant data on mount
+onMounted(() => {
+  fetchTenantDetails()
+})
 </script>
 
 <template>
@@ -20,7 +72,7 @@ const notifications = ref([
     <!-- Header -->
     <v-row class="mb-6">
       <v-col cols="12" class="hover-scale fade-in delay-100">
-        <h2 class="text-h4 font-weight-bold text-white">Welcome, John Doe!</h2>
+        <h2 class="text-h4 font-weight-bold text-white">Welcome, {{ tenantName }}!</h2>
         <p class="text-body-1 text-grey-lighten-1">
           Here's a summary of your current billing status and upcoming payments.
         </p>

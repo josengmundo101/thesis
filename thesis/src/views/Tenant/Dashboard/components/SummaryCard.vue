@@ -2,55 +2,77 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { supabase } from '@/utils/supabase'
 
+// Reactive State
 const outstandingBalance = ref(0)
 const dueDate = ref('')
 const loading = ref(true)
 const errorMessage = ref('')
 
-// Function to fetch invoice data
-const fetchInvoice = async () => {
-  loading.value = true
+// Function to fetch outstanding balance
+const fetchOutstandingBalance = async () => {
   try {
-    // Get the currently logged-in user's ID
+    loading.value = true // Start loading
+
+    // Step 0: Get the currently logged-in user
     const {
       data: { user },
+      error,
     } = await supabase.auth.getUser()
-    if (!user) throw new Error('Not authenticated')
 
-    // Fetch the user's invoice by joining users and invoices
-    const { data, error } = await supabase
+    if (error || !user) {
+      errorMessage.value = '⚠️ No logged-in user found.'
+      console.error(error)
+      return
+    }
+
+    // Step 1: Fetch the user's invoice_id
+    const { data: userData, error: userError } = await supabase
       .from('users')
-      .select(
-        `
-        invoice_id,
-        invoices(total_amount, outstanding_balance, due_date)
-      `,
-      )
+      .select('invoice_id')
       .eq('user_id', user.id)
       .single()
 
-    if (error) throw error
-    if (data && data.invoices) {
-      // Update state with fetched data
-      outstandingBalance.value = data.invoices.outstanding_balance || 0
-      dueDate.value = new Date(data.invoices.due_date).toLocaleDateString()
+    if (userError || !userData?.invoice_id) {
+      errorMessage.value = '⚠️ No invoice found for this user.'
+      console.error(userError)
+      return
+    }
+
+    // Step 2: Fetch the outstanding balance
+    const { data: invoiceData, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('outstanding_balance, due_date')
+      .eq('invoice_id', userData.invoice_id)
+      .single()
+
+    if (invoiceError) {
+      errorMessage.value = '🛑 Error fetching invoice data.'
+      console.error(invoiceError)
+    } else {
+      // Update State
+      outstandingBalance.value = invoiceData.outstanding_balance || 0
+      dueDate.value = new Date(invoiceData.due_date).toLocaleDateString() || 'N/A'
+      console.log('✅ Data fetched:', {
+        outstandingBalance: outstandingBalance.value,
+        dueDate: dueDate.value,
+      })
     }
   } catch (err) {
-    console.error('Error fetching invoice:', err.message)
-    errorMessage.value = err.message
+    errorMessage.value = '🛑 Unexpected error occurred.'
+    console.error(err)
   } finally {
-    loading.value = false
+    loading.value = false // Stop loading
   }
 }
 
-// Listen for real-time updates
+// Real-time Update Listener
 const handleTotalAmountUpdated = async () => {
-  await fetchInvoice() // Refetch invoice data on update
+  await fetchOutstandingBalance()
 }
 
-// Event Listeners for Real-time Update
+// Lifecycle Hooks
 onMounted(() => {
-  fetchInvoice() // Fetch on component mount
+  fetchOutstandingBalance()
   window.addEventListener('total-amount-updated', handleTotalAmountUpdated)
 })
 
@@ -64,14 +86,20 @@ onBeforeUnmount(() => {
     <v-card-title class="text-h6 font-weight-bold">Summary</v-card-title>
     <v-divider></v-divider>
 
+    <!-- Loading State -->
     <v-progress-circular v-if="loading" indeterminate color="primary" class="my-5" />
-    <v-alert v-if="errorMessage" type="error" class="mb-4">{{ errorMessage }}</v-alert>
 
+    <!-- Error State -->
+    <v-alert v-if="errorMessage" type="error" class="mb-4">
+      {{ errorMessage }}
+    </v-alert>
+
+    <!-- Display Balance -->
     <v-list v-if="!loading && !errorMessage" density="compact">
       <v-list-item>
         <v-list-item-title>Outstanding Balance:</v-list-item-title>
         <v-list-item-subtitle class="text-h6 font-weight-bold text-error">
-          ₱{{ outstandingBalance }}
+          ₱{{ outstandingBalance.toLocaleString() }}
         </v-list-item-subtitle>
       </v-list-item>
       <v-list-item>
