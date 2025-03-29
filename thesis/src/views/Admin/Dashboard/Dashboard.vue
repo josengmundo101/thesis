@@ -6,26 +6,55 @@ import PendingConfirmedChart from './components/PendingConfirmedChart.vue'
 import RevenueChart from './components/RevenueChart.vue'
 import MonthlyRevenue from './components/MonthlyRevenue.vue'
 
-//State Variable
+// State Variables
 const totalTenants = ref(0)
+const pendingPayments = ref(0)
+const confirmedPayments = ref(0)
 
-//Fetch Tenants from Supabase
+// Fetch Tenants
 const fetchTenants = async () => {
   try {
     const { data, error } = await supabase.from('users').select('*').eq('role', 'tenant')
 
     if (error) throw error
-
     totalTenants.value = data.length
     console.log('Total Tenants:', totalTenants.value)
   } catch (error) {
-    console.log('Error Fetching tenants', error.message)
+    console.log('Error fetching tenants:', error.message)
   }
 }
 
-// Fetch tenants when the component is mounted
+// Fetch Pending Payments
+const fetchPendingPayments = async () => {
+  try {
+    const { data, error } = await supabase.from('payment').select('*').eq('status', 'pending')
+
+    if (error) throw error
+    pendingPayments.value = data.length
+    console.log('Pending Payments:', pendingPayments.value)
+  } catch (error) {
+    console.log('Error fetching pending payments:', error.message)
+  }
+}
+
+// Fetch Confirmed Payments
+const fetchConfirmedPayments = async () => {
+  try {
+    const { data, error } = await supabase.from('payment').select('*').eq('status', 'approved') // Ensure status matches DB
+
+    if (error) throw error
+    confirmedPayments.value = data.length
+    console.log('Confirmed Payments:', confirmedPayments.value)
+  } catch (error) {
+    console.log('Error fetching confirmed payments:', error.message)
+  }
+}
+
+// Lifecycle Hook
 onMounted(() => {
   fetchTenants()
+  fetchPendingPayments()
+  fetchConfirmedPayments()
 })
 </script>
 
@@ -44,11 +73,23 @@ onMounted(() => {
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="clock" value="20" label="Pending payments" />
+        <StatCard
+          color="white"
+          flat
+          icon="clock"
+          :value="pendingPayments"
+          label="Pending payments"
+        />
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="credit-card" value="15" label="Confirmed payments" />
+        <StatCard
+          color="white"
+          flat
+          icon="credit-card"
+          :value="confirmedPayments"
+          label="Confirmed payments"
+        />
       </v-col>
 
       <v-col cols="12" sm="6" md="3">

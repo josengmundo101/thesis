@@ -1,22 +1,64 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import TenantHistoryTable from '../History/components/TenantHistoryTable.vue'
+import { supabase } from '@/utils/supabase'
 
-// Simulate logged-in tenant's name (Replace this with actual user data from authentication)
-const currentTenant = ref('John Doe')
+// Reactive variables
+const payments = ref([])
+const loading = ref(true)
+const error = ref(null)
 
-// Payment data (Replace with real data from your backend)
-const payments = ref([
-  { id: 1, name: 'John Doe', amountPaid: 5000, date: 'March 1, 2025' },
-  { id: 2, name: 'Jane Smith', amountPaid: 3200, date: 'March 5, 2025' },
-  { id: 3, name: 'Michael Johnson', amountPaid: 4500, date: 'March 10, 2025' },
-  { id: 4, name: 'John Doe', amountPaid: 5200, date: 'March 20, 2025' },
-])
+// Get the current logged-in user's ID
+const getCurrentUser = async () => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return user ? user.id : null
+}
 
-// Filter the payments for the logged-in tenant
-const tenantPayments = computed(() =>
-  payments.value.filter((payment) => payment.name === currentTenant.value),
-)
+// Fetch payments from Supabase
+const fetchTenantPayments = async () => {
+  loading.value = true
+  error.value = null
+
+  try {
+    const userId = await getCurrentUser()
+    if (!userId) throw new Error('User not authenticated.')
+
+    // Fetch payments where user_id matches
+    const { data, error: fetchError } = await supabase
+      .from('payment')
+      .select('payment_id, amount, payment_method, payment_date, status')
+      .eq('user_id', userId)
+      .order('payment_date', { ascending: false })
+
+    if (fetchError) throw fetchError
+
+    // Update payments data
+    payments.value = data.map((payment) => ({
+      id: payment.payment_id,
+      amount: payment.amount,
+      method: payment.payment_method,
+      date: payment.payment_date
+        ? new Date(payment.payment_date).toLocaleDateString('en-PH', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        : 'No Date Available',
+      status: payment.status,
+    }))
+  } catch (err) {
+    error.value = err.message || 'Failed to load payment history.'
+  } finally {
+    loading.value = false
+  }
+}
+
+// Fetch payments on component mount
+onMounted(() => {
+  fetchTenantPayments()
+})
 </script>
 
 <template>
@@ -41,7 +83,20 @@ const tenantPayments = computed(() =>
       <v-divider></v-divider>
 
       <v-card-text>
-        <TenantHistoryTable :payments="tenantPayments" />
+        <template v-if="loading">
+          <v-progress-circular indeterminate color="primary" />
+        </template>
+
+        <template v-else-if="error">
+          <div class="text-center text-red font-weight-medium">
+            <v-icon color="red" size="36">mdi-alert-circle-outline</v-icon>
+            <p>{{ error }}</p>
+          </div>
+        </template>
+
+        <template v-else>
+          <TenantHistoryTable :payments="payments" />
+        </template>
       </v-card-text>
     </v-card>
   </v-container>

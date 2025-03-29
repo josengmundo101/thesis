@@ -1,9 +1,30 @@
 import { supabase, formActionDefault } from '@/utils/supabase'
 
-const generateCustomID = (role) => {
+// Function to generate the next custom ID based on the last entry
+const generateCustomID = async (role) => {
   const prefix = role === 'admin' ? 'ADMIN' : 'TENANT'
-  const timestamp = Date.now().toString().slice(-5) // Get last 5 digits of timestamp
-  return `${prefix}-${timestamp}` // e.g., TENANT-76432
+
+  // Fetch the last custom_id from the database
+  const { data, error } = await supabase
+    .from('users')
+    .select('custom_id')
+    .like('custom_id', `${prefix}-%`)
+    .order('custom_id', { ascending: false })
+    .limit(1)
+
+  if (error) throw error
+
+  let nextNumber = 1 // Default to 1 if no previous ID exists
+
+  if (data.length > 0) {
+    const lastCustomID = data[0].custom_id
+    const lastNumber = parseInt(lastCustomID.split('-')[1], 10)
+    if (!isNaN(lastNumber)) {
+      nextNumber = lastNumber + 1
+    }
+  }
+
+  return `${prefix}-${String(nextNumber).padStart(3, '0')}` // Ensures format like TENANT-001
 }
 
 // 🔹 Register User (Creates Admin if First User)
@@ -23,7 +44,7 @@ export const signUp = async (userData) => {
     const role = count === 0 ? 'admin' : 'tenant'
 
     // Generate Custom ID (e.g., TENANT-001)
-    const customId = generateCustomID(role, count)
+    const customId = await generateCustomID(role)
 
     // ✅ Step 1: Sign up user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({

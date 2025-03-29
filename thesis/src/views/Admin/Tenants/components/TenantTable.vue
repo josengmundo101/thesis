@@ -91,10 +91,16 @@ const getRoomDetails = (tenant) => {
             <span v-else class="text-grey-darken-1 italic">Not assigned</span>
           </td>
           <td>
-            <v-chip :color="tenant.status === 'Paid' ? 'green' : 'orange'" small>
+            <v-chip
+              :color="
+                tenant.status === 'Paid' ? 'green' : tenant.status === 'Pending' ? 'orange' : 'red'
+              "
+              small
+            >
               {{ tenant.status }}
             </v-chip>
           </td>
+
           <td>
             <v-btn size="small" variant="text" color="primary" @click="emit('viewDetails', tenant)">
               <v-icon left>mdi-eye</v-icon> View

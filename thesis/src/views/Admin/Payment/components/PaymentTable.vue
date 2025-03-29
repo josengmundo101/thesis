@@ -1,5 +1,6 @@
 <script setup>
-// import { defineProps, defineEmits } from 'vue'
+import { ref } from 'vue'
+import { defineEmits, defineProps } from 'vue'
 
 const props = defineProps({
   payments: {
@@ -8,68 +9,81 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update-status'])
+const emit = defineEmits(['status-change'])
 
-const updateStatus = (id, status) => {
-  emit('update-status', id, status)
+// Dialog Handling
+const dialog = ref(false)
+const selectedPayment = ref(null)
+
+// Open Confirm Dialog
+const openDialog = (payment, action) => {
+  selectedPayment.value = { ...payment, action }
+  dialog.value = true
+}
+
+// Emit Status Change Event
+const changeStatus = () => {
+  if (selectedPayment.value) {
+    emit('status-change', selectedPayment.value.id, selectedPayment.value.action)
+    dialog.value = false
+  }
 }
 </script>
 
 <template>
-  <v-card elevation="2">
-    <v-table>
-      <thead>
-        <tr>
-          <th class="text-left">Name</th>
-          <th class="text-left">Payment</th>
-          <th class="text-left">Time</th>
-          <th class="text-left">Date</th>
-          <th class="text-left">Action</th>
-        </tr>
-
-        <tr v-for="payment in props.payments" :key="payment.id"></tr>
-      </thead>
-      <tbody>
-        <tr v-for="payment in payments" :key="payment.id">
-          <td>{{ payment.name }}</td>
-          <td>{{ payment.amount }}</td>
-          <td>{{ payment.time }}</td>
-          <td>{{ payment.date }}</td>
+  <v-card>
+    <v-data-table
+      :headers="[
+        { text: 'Name', value: 'name' },
+        { text: 'Amount', value: 'amount' },
+        { text: 'Date', value: 'date' },
+        { text: 'Status', value: 'status' },
+        { text: 'Actions', value: 'actions', sortable: false },
+      ]"
+      :items="payments"
+      class="elevation-1"
+    >
+      <template #body="{ items }">
+        <tr v-for="item in items" :key="item.id">
+          <td>{{ item.name }}</td>
+          <td>{{ item.amount }}</td>
+          <td>{{ item.date }}</td>
+          <td>{{ item.status }}</td>
           <td>
             <v-btn
-              v-if="payment.status === 'Pending'"
-              color="green"
-              size="small"
-              @click="updateStatus(payment.id, 'Approved')"
+              color="success"
+              class="mr-2"
+              @click="openDialog(item, 'approved')"
+              :disabled="item.status.toLowerCase() === 'approved'"
             >
               Approve
             </v-btn>
             <v-btn
-              v-if="payment.status === 'Pending'"
-              color="red"
-              size="small"
-              class="ml-2"
-              @click="updateStatus(payment.id, 'Rejected')"
+              color="error"
+              @click="openDialog(item, 'rejected')"
+              :disabled="item.status.toLowerCase() === 'rejected'"
             >
               Reject
             </v-btn>
-            <v-chip
-              v-if="payment.status !== 'Pending'"
-              :color="payment.status === 'Approved' ? 'green' : 'red'"
-              small
-            >
-              {{ payment.status }}
-            </v-chip>
           </td>
         </tr>
-      </tbody>
-    </v-table>
+      </template>
+    </v-data-table>
   </v-card>
-</template>
 
-<style scoped>
-.v-chip {
-  font-size: 12px;
-  font-weight: 500;
-}
-</style>
+  <!-- Confirmation Dialog -->
+  <v-dialog v-model="dialog" max-width="400">
+    <v-card>
+      <v-card-title class="headline">Change Payment Status</v-card-title>
+      <v-card-text>
+        Are you sure you want to
+        <strong>{{ selectedPayment.value?.action }}</strong>
+        this payment?
+      </v-card-text>
+      <v-card-actions>
+        <v-btn text color="grey" @click="dialog = false">Cancel</v-btn>
+        <v-btn color="primary" @click="changeStatus">Confirm</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</template>

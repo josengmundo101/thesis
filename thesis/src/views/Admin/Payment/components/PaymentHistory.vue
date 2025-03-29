@@ -1,28 +1,75 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
 
-const payments = ref([
-  { id: 1, name: 'John Doe', amountPaid: 5000, date: 'March 1, 2025' },
-  { id: 2, name: 'Jane Smith', amountPaid: 3200, date: 'March 5, 2025' },
-  { id: 3, name: 'Michael Johnson', amountPaid: 4500, date: 'March 10, 2025' },
-  { id: 4, name: 'Emily Davis', amountPaid: 2800, date: 'March 15, 2025' },
-  { id: 5, name: 'Robert Brown', amountPaid: 5200, date: 'March 20, 2025' },
-])
+const payments = ref([])
 
+// Format to PHP Currency
 const formatCurrency = (value) => {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-PH', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'PHP',
     minimumFractionDigits: 0,
   }).format(value)
 }
+
+// Fetch Payment History from Supabase
+const fetchPaymentHistory = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('payment')
+      .select(
+        `
+    payment_id,
+    amount,
+    payment_date,
+    status,
+    users (firstname, lastname)
+  `,
+      )
+      .order('payment_date', { ascending: false })
+
+    console.log(data, error)
+
+    if (error) throw error
+
+    console.log('Fetched Payments:', data) // Debug output
+
+    payments.value = data.map((payment) => ({
+      id: payment.payment_id,
+      name: `${payment.users.firstname} ${payment.users.lastname}`,
+      amountPaid: payment.amount,
+      date: new Date(payment.payment_date).toLocaleDateString('en-PH', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+    }))
+  } catch (error) {
+    console.error('Error fetching payment history:', error.message)
+  }
+}
+
+// Fetch data when component is mounted
+onMounted(() => {
+  fetchPaymentHistory()
+
+  // Optional: Real-time updates
+  supabase
+    .channel('payments')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'payment' }, () => {
+      console.log('Change detected, refetching data...')
+      fetchPaymentHistory()
+    })
+    .subscribe()
+})
 </script>
 
 <template>
   <v-card class="payment-history-card elevation-2">
     <v-card-title class="d-flex align-center">
       <v-icon color="primary" class="mr-2">mdi-history</v-icon>
-      <span class="text-h6 font-weight-bold">Payment History</span>
+      <span class="text-h6 font-weight-bold">Approved Payment History</span>
     </v-card-title>
 
     <v-divider></v-divider>

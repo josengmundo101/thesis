@@ -19,10 +19,11 @@ const assignModalOpen = ref(false)
 const ITEMS_PER_PAGE = 5
 
 // 🔍 Fetch tenants from Supabase where role = 'tenant'
+
 const fetchTenants = async () => {
   loading.value = true
   try {
-    // Fetch tenants with bed_assignment and rooms
+    // Fetch tenants with bed_assignment, rooms, and invoices
     const { data, error } = await supabase
       .from('users')
       .select(
@@ -33,6 +34,9 @@ const fetchTenants = async () => {
           rooms (
             room_number
           )
+        ),
+        invoices (
+          status
         )
       `,
       )
@@ -40,8 +44,12 @@ const fetchTenants = async () => {
 
     if (error) throw error
 
-    tenants.value = data
-    console.log('Fetched Tenants:', tenants.value)
+    // Map tenants with status
+    tenants.value = data.map((tenant) => ({
+      ...tenant,
+      status: tenant?.invoices?.status || 'Unpaid',
+    }))
+    console.log('Fetched Tenants with Status:', tenants.value)
   } catch (error) {
     console.error('Error fetching tenants:', error.message)
     errorMessage.value = 'Failed to load tenants. Please try again later.'
