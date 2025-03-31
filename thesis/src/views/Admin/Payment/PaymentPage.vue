@@ -21,6 +21,7 @@ const fetchPayments = async () => {
         transaction_id,
         payment_date,
         status,
+        invoice_id,
         users (firstname, lastname)
       `,
       )
@@ -40,6 +41,7 @@ const fetchPayments = async () => {
         year: 'numeric',
       }),
       status: payment.status,
+      invoice_id: payment.invoice_id,
     }))
   } catch (error) {
     console.error('Error fetching payments:', error.message)
@@ -47,25 +49,40 @@ const fetchPayments = async () => {
 }
 
 // Update Payment Status Function
-const updatePaymentStatus = async (id, status) => {
+const updatePaymentStatus = async (payment) => {
+  console.log('🛑 Received Payment Object:', payment)
+
   const validStatuses = ['pending', 'approved', 'rejected']
 
-  if (!validStatuses.includes(status.toLowerCase())) {
-    console.error('Invalid status value:', status)
+  if (!payment || !validStatuses.includes(payment.action.toLowerCase())) {
+    console.error('❌ Invalid or missing status:', payment.action)
     return
   }
 
   try {
-    const { error } = await supabase.from('payment').update({ status }).eq('payment_id', id)
+    // Update status in 'payment' table
+    const { error: paymentError } = await supabase
+      .from('payment')
+      .update({ status: payment.action })
+      .eq('payment_id', payment.payment_id)
 
-    if (error) throw error
+    if (paymentError) throw paymentError
 
-    const payment = payments.value.find((p) => p.id === id)
-    if (payment) payment.status = status
+    // Update status in 'invoices' table
+    const { error: invoiceError } = await supabase
+      .from('invoices')
+      .update({ status: payment.action })
+      .eq('invoice_id', payment.invoice_id)
 
-    console.log(`Payment status updated to '${status}'`)
+    if (invoiceError) throw invoiceError
+
+    // Reflect the change in local state
+    const record = payments.value.find((p) => p.id === payment.payment_id)
+    if (record) record.status = payment.action
+
+    console.log(`✅ Payment & Invoice status updated to '${payment.action}'`)
   } catch (error) {
-    console.error('Error updating payment status:', error.message)
+    console.error('❌ Error updating status:', error.message)
   }
 }
 

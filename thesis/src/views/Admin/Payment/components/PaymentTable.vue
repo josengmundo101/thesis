@@ -24,7 +24,12 @@ const openDialog = (payment, action) => {
 // Emit Status Change Event
 const changeStatus = () => {
   if (selectedPayment.value) {
-    emit('status-change', selectedPayment.value.id, selectedPayment.value.action)
+    emit('status-change', {
+      payment_id: selectedPayment.value.id,
+      invoice_id: selectedPayment.value.invoice_id,
+      amount: selectedPayment.value.amount,
+      action: selectedPayment.value.action,
+    })
     dialog.value = false
   }
 }

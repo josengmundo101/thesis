@@ -4,17 +4,18 @@ import { supabase } from '@/utils/supabase'
 import BillingCard from './components/BillingCard.vue'
 import SummaryCard from './components/SummaryCard.vue'
 import NotificationCard from './components/NotificationCard.vue'
-
-// Reactive States
+import { useNotificationStore } from '@/stores/useNotificationStore'
+// State
 const summary = ref({
   balance: 0,
   dueDate: '',
 })
 
-const notifications = ref([])
+const notificationStore = useNotificationStore()
+
 const tenantName = ref('Tenant') // Default to "Tenant"
 
-// 🔍 Function to fetch logged-in user's details
+// Fetch Tenant Details
 const fetchTenantDetails = async () => {
   try {
     const {
@@ -29,16 +30,7 @@ const fetchTenantDetails = async () => {
     const { data: tenantData, error: tenantError } = await supabase
       .from('users')
       .select(
-        `
-        firstname,
-        lastname,
-        invoice_id,
-        invoices (
-          total_amount,
-          outstanding_balance,
-          due_date
-        )
-      `,
+        `firstname, lastname, invoice_id, invoices (total_amount, outstanding_balance, due_date)`,
       )
       .eq('user_id', user.id)
       .single()
@@ -61,15 +53,16 @@ const fetchTenantDetails = async () => {
   }
 }
 
-// 🚀 Fetch tenant data on mount
+// Fetch Data on Mount
 onMounted(() => {
   fetchTenantDetails()
+  notificationStore.loadNotifications() // ✅ Load notifications
+  console.log('📢 Tenant Notifications:', notificationStore.notifications) // ✅ Log state
 })
 </script>
 
 <template>
   <v-container class="mt-8">
-    <!-- Header -->
     <v-row class="mb-6">
       <v-col cols="12" class="hover-scale fade-in delay-100">
         <h2 class="text-h4 font-weight-bold text-white">Welcome, {{ tenantName }}!</h2>
@@ -93,25 +86,8 @@ onMounted(() => {
     <!-- Notifications -->
     <v-row>
       <v-col cols="12">
-        <NotificationCard :notifications="notifications" />
+        <NotificationCard :notifications="notificationStore.notifications" />
       </v-col>
     </v-row>
   </v-container>
 </template>
-
-<style scoped>
-h2 {
-  font-size: 28px;
-}
-
-.v-card {
-  transition:
-    transform 0.2s ease-in-out,
-    box-shadow 0.2s;
-}
-
-.v-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.08);
-}
-</style>

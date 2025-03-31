@@ -1,43 +1,44 @@
 import { supabase } from '@/utils/supabase'
 
-// ✅ Function to Add Monthly Due
-export const addMonthlyDue = async () => {
+// ✅ Function to Process Monthly Payment
+export const processMonthlyPayment = async (invoice_id, payment_amount) => {
   try {
-    // Get today's date
-    const today = new Date()
-    const nextMonth = new Date(today.setMonth(today.getMonth() + 1)).toISOString().slice(0, 10)
-
-    // Fetch all invoices with pending or overdue status
-    const { data: dueInvoices, error } = await supabase
+    // Fetch the current invoice
+    const { data: invoice, error } = await supabase
       .from('invoices')
       .select('*')
-      .or('status.eq.Pending,due_date.lt.now()')
+      .eq('invoice_id', invoice_id)
+      .single()
 
     if (error) throw error
+    if (!invoice) throw new Error('Invoice not found.')
 
-    if (dueInvoices.length === 0) {
-      console.log('No pending or overdue invoices to update.')
-      return
-    }
+    // Check if full payment was made
+    const isFullyPaid = payment_amount >= invoice.outstanding_balance
 
-    // Loop through each due invoice and update outstanding balance
-    for (const invoice of dueInvoices) {
-      const newOutstanding = invoice.outstanding_balance + invoice.total_amount
+    // ✅ Calculate Next Month's Due Date
+    const today = new Date()
+    const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate())
+    if (nextMonthDate.getDate() !== today.getDate()) nextMonthDate.setDate(0) // Adjust for short months
+    const nextMonthDue = nextMonthDate.toISOString().slice(0, 10)
 
-      // Update the invoice with the new outstanding balance and next month's due date
-      const { error: updateError } = await supabase
-        .from('invoices')
-        .update({
-          outstanding_balance: newOutstanding,
-          due_date: nextMonth,
-        })
-        .eq('invoice_id', invoice.invoice_id)
+    // Determine the new outstanding balance
+    const newOutstanding = isFullyPaid ? 0 : invoice.outstanding_balance - payment_amount
 
-      if (updateError) throw updateError
+    // ✅ Update invoice with correct status and due date
+    const { error: updateError } = await supabase
+      .from('invoices')
+      .update({
+        outstanding_balance: newOutstanding, // Set to 0 if fully paid
+        status: isFullyPaid ? 'approved' : 'pending', // Only "Approved" or "Pending"
+        due_date: nextMonthDue, // Always update the due date
+      })
+      .eq('invoice_id', invoice_id)
 
-      console.log(`✅ Updated Invoice ${invoice.invoice_id}: New Outstanding = ₱${newOutstanding}`)
-    }
+    if (updateError) throw updateError
+
+    console.log(`✅ Invoice ${invoice_id} updated: Outstanding = ₱${newOutstanding}`)
   } catch (error) {
-    console.error('⚠️ Error adding monthly due:', error.message)
+    console.error('⚠️ Error processing payment:', error.message)
   }
 }

@@ -5,10 +5,11 @@ import { supabase } from '@/utils/supabase'
 // Reactive State
 const outstandingBalance = ref(0)
 const dueDate = ref('')
+const paymentStatus = ref('') // New State for Status
 const loading = ref(true)
 const errorMessage = ref('')
 
-// Function to fetch outstanding balance
+// Function to fetch invoice data
 const fetchOutstandingBalance = async () => {
   try {
     loading.value = true // Start loading
@@ -38,10 +39,10 @@ const fetchOutstandingBalance = async () => {
       return
     }
 
-    // Step 2: Fetch the outstanding balance
+    // Step 2: Fetch the invoice details including status
     const { data: invoiceData, error: invoiceError } = await supabase
       .from('invoices')
-      .select('outstanding_balance, due_date')
+      .select('outstanding_balance, due_date, status')
       .eq('invoice_id', userData.invoice_id)
       .single()
 
@@ -52,9 +53,11 @@ const fetchOutstandingBalance = async () => {
       // Update State
       outstandingBalance.value = invoiceData.outstanding_balance || 0
       dueDate.value = new Date(invoiceData.due_date).toLocaleDateString() || 'N/A'
+      paymentStatus.value = invoiceData.status || 'Pending' // Capture Status
       console.log('✅ Data fetched:', {
         outstandingBalance: outstandingBalance.value,
         dueDate: dueDate.value,
+        paymentStatus: paymentStatus.value,
       })
     }
   } catch (err) {
@@ -102,9 +105,28 @@ onBeforeUnmount(() => {
           ₱{{ outstandingBalance.toLocaleString() }}
         </v-list-item-subtitle>
       </v-list-item>
+
       <v-list-item>
         <v-list-item-title>Payment Due:</v-list-item-title>
         <v-list-item-subtitle class="font-weight-bold">{{ dueDate }}</v-list-item-subtitle>
+      </v-list-item>
+
+      <v-list-item>
+        <v-list-item-title>Status:</v-list-item-title>
+        <v-list-item-subtitle>
+          <v-chip
+            :color="
+              paymentStatus === 'Paid'
+                ? 'success'
+                : paymentStatus === 'Overdue'
+                  ? 'error'
+                  : 'warning'
+            "
+            class="font-weight-bold"
+          >
+            {{ paymentStatus }}
+          </v-chip>
+        </v-list-item-subtitle>
       </v-list-item>
     </v-list>
 

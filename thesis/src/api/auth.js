@@ -1,4 +1,5 @@
 import { supabase, formActionDefault } from '@/utils/supabase'
+import router from '@/router'
 
 // Function to generate the next custom ID based on the last entry
 const generateCustomID = async (role) => {
@@ -89,13 +90,13 @@ export const signIn = async (email, password) => {
   try {
     if (!email || !password) throw new Error('Email and Password are required.')
 
+    // Authenticate with Supabase
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (error) {
-      // Handle Specific Auth Errors
       if (error.status === 400) {
         throw new Error('Invalid email or password. Please try again.')
       } else if (error.status === 429) {
@@ -105,10 +106,33 @@ export const signIn = async (email, password) => {
       }
     }
 
-    console.log('✅ Login Success:', data)
+    const user = data.user
+
+    // Fetch user role from the database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+
+    if (userError) throw userError
+
+    const role = userData.role
+
+    // 🔹 Store role in localStorage to prevent session switching
+    localStorage.setItem('user_role', role)
+
+    // 🔹 Redirect based on role
+    if (role === 'admin') {
+      router.push('/admin/dashboard')
+    } else {
+      router.push('/tenant/tenantDashboard')
+    }
+
+    console.log('✅ Login Success:', user, 'Role:', role)
     action.formStatus = 200
     action.formSuccessMessage = `Welcome back!`
-    return { ...action, user: data.user }
+    return { ...action, user }
   } catch (error) {
     console.error('🛑 Login Failed:', error.message)
     action.formStatus = 400
@@ -122,6 +146,10 @@ export const signOut = async () => {
   try {
     const { error } = await supabase.auth.signOut()
     if (error) throw error
+
+    // Clear role to prevent conflicts
+    localStorage.removeItem('user_role')
+
     return { success: true }
   } catch (error) {
     console.error('Logout Error:', error.message)

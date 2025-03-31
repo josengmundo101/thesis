@@ -70,7 +70,7 @@ export const useUtilityStore = defineStore('utility', () => {
           total_amount: totalAmount,
           outstanding_balance: outstandingBalance,
           due_date: new Date().toISOString().slice(0, 10),
-          status: 'Pending',
+          status: 'pending',
         },
         { onConflict: 'invoice_id' },
       )
@@ -102,21 +102,52 @@ export const useUtilityStore = defineStore('utility', () => {
         data: { user },
         error,
       } = await supabase.auth.getUser()
-      if (error) throw error
+      if (error || !user) throw new Error('No user is currently logged in.')
 
-      const { data: invoiceData, error: invoiceError } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('invoice_id')
         .eq('user_id', user.id)
         .single()
 
-      if (invoiceError) throw invoiceError
-      if (invoiceData) {
-        invoiceId.value = invoiceData.invoice_id
+      if (userError) throw userError
+
+      // Create invoice if none exists
+      if (!userData?.invoice_id) {
+        console.warn('⚠️ No invoice found. Creating a new one...')
+
+        // Insert a new invoice
+        const { data: newInvoice, error: createError } = await supabase
+          .from('invoices')
+          .insert([
+            {
+              total_amount: 0,
+              outstanding_balance: 0,
+              due_date: new Date().toISOString().slice(0, 10),
+              status: 'pending',
+            },
+          ])
+          .select('invoice_id')
+          .single()
+
+        if (createError) throw createError
+
+        // Update user with the new invoice_id
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ invoice_id: newInvoice.invoice_id })
+          .eq('user_id', user.id)
+
+        if (updateError) throw updateError
+
+        invoiceId.value = newInvoice.invoice_id
+        console.log('✅ New Invoice ID created:', invoiceId.value)
+      } else {
+        invoiceId.value = userData.invoice_id
         console.log('✅ Fetched Invoice ID:', invoiceId.value)
       }
     } catch (error) {
-      console.error('⚠️ Error fetching invoice ID:', error.message)
+      console.error('⚠️ Error fetching or creating invoice ID:', error.message)
     }
   }
 

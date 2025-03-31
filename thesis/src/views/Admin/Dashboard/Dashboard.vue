@@ -10,7 +10,34 @@ import MonthlyRevenue from './components/MonthlyRevenue.vue'
 const totalTenants = ref(0)
 const pendingPayments = ref(0)
 const confirmedPayments = ref(0)
+const totalRevenue = ref(0) // Add this line
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 0,
+  }).format(value)
+}
+
+// Fetch Total Revenue
+const fetchTotalRevenue = async () => {
+  try {
+    const { data, error } = await supabase.from('payment').select('amount').eq('status', 'approved') // Only count confirmed payments
+
+    if (error) throw error
+
+    // Sum all approved payment amounts
+    totalRevenue.value = data.reduce((sum, payment) => {
+      return sum + (parseFloat(payment.amount) || 0)
+    }, 0)
+
+    console.log('Total Revenue:', totalRevenue.value)
+  } catch (error) {
+    console.error('Error fetching total revenue:', error.message)
+    totalRevenue.value = 0
+  }
+}
 // Fetch Tenants
 const fetchTenants = async () => {
   try {
@@ -55,6 +82,7 @@ onMounted(() => {
   fetchTenants()
   fetchPendingPayments()
   fetchConfirmedPayments()
+  fetchTotalRevenue()
 })
 </script>
 
@@ -93,7 +121,13 @@ onMounted(() => {
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="chart" value="20,000" label="Total revenue" />
+        <StatCard
+          color="white"
+          flat
+          icon="chart"
+          :value="formatCurrency(totalRevenue)"
+          label="Total revenue"
+        />
       </v-col>
     </v-row>
 

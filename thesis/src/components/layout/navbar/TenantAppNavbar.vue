@@ -58,19 +58,9 @@ onMounted(() => {
 
 // 🔑 Handle Logout
 const handleLogout = async () => {
-  try {
-    loading.value = true
-    const { success, message } = await signOut()
-    if (success) {
-      router.push('/login') // ✅ Redirect to Tenant Login after logout
-    } else {
-      console.error('Logout Failed:', message)
-    }
-  } catch (error) {
-    console.error('Logout Error:', error.message)
-  } finally {
-    loading.value = false
-  }
+  await supabase.auth.signOut()
+  localStorage.clear() // Clear role and session
+  router.push('/login')
 }
 </script>
 
