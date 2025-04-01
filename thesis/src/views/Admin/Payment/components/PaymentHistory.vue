@@ -20,20 +20,19 @@ const fetchPaymentHistory = async () => {
       .from('payment')
       .select(
         `
-    payment_id,
-    amount,
-    payment_date,
-    status,
-    users (firstname, lastname)
-  `,
+        payment_id,
+        amount,
+        payment_date,
+        status,
+        users (firstname, lastname)
+      `,
       )
+      .eq('status', 'approved') // ✅ Only fetch approved payments
       .order('payment_date', { ascending: false })
-
-    console.log(data, error)
 
     if (error) throw error
 
-    console.log('Fetched Payments:', data) // Debug output
+    console.log('Fetched Payments:', data) // Debugging Output
 
     payments.value = data.map((payment) => ({
       id: payment.payment_id,
@@ -46,7 +45,7 @@ const fetchPaymentHistory = async () => {
       }),
     }))
   } catch (error) {
-    console.error('Error fetching payment history:', error.message)
+    console.error('Error fetching approved payment history:', error.message)
   }
 }
 

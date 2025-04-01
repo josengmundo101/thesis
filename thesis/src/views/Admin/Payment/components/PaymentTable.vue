@@ -1,6 +1,5 @@
 <script setup>
-import { ref } from 'vue'
-import { defineEmits, defineProps } from 'vue'
+import { ref, defineProps, defineEmits } from 'vue'
 
 const props = defineProps({
   payments: {
@@ -24,6 +23,13 @@ const openDialog = (payment, action) => {
 // Emit Status Change Event
 const changeStatus = () => {
   if (selectedPayment.value) {
+    // Update the status in the local payments array immediately
+    const paymentIndex = props.payments.findIndex((p) => p.id === selectedPayment.value.id)
+    if (paymentIndex !== -1) {
+      props.payments[paymentIndex].status = selectedPayment.value.action // Update status locally
+    }
+
+    // Emit the event to update the database
     emit('status-change', {
       payment_id: selectedPayment.value.id,
       invoice_id: selectedPayment.value.invoice_id,
@@ -53,20 +59,29 @@ const changeStatus = () => {
           <td>{{ item.name }}</td>
           <td>{{ item.amount }}</td>
           <td>{{ item.date }}</td>
-          <td>{{ item.status }}</td>
+          <td>
+            <v-chip
+              :color="
+                item.status === 'approved' ? 'green' : item.status === 'rejected' ? 'red' : 'grey'
+              "
+              dark
+            >
+              {{ item.status }}
+            </v-chip>
+          </td>
           <td>
             <v-btn
+              v-if="item.status !== 'approved' && item.status !== 'rejected'"
               color="success"
               class="mr-2"
               @click="openDialog(item, 'approved')"
-              :disabled="item.status.toLowerCase() === 'approved'"
             >
               Approve
             </v-btn>
             <v-btn
+              v-if="item.status !== 'approved' && item.status !== 'rejected'"
               color="error"
               @click="openDialog(item, 'rejected')"
-              :disabled="item.status.toLowerCase() === 'rejected'"
             >
               Reject
             </v-btn>

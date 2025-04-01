@@ -93,7 +93,11 @@ const getRoomDetails = (tenant) => {
           <td>
             <v-chip
               :color="
-                tenant.status === 'Paid' ? 'green' : tenant.status === 'Pending' ? 'orange' : 'red'
+                tenant.status === 'approved'
+                  ? 'green'
+                  : tenant.status === 'pending'
+                    ? 'orange'
+                    : 'red'
               "
               small
             >

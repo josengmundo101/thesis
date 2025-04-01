@@ -15,7 +15,7 @@ onMounted(async () => {
 const handleSave = async () => {
   loading.value = true
   try {
-    await store.saveChanges()
+    await store.saveSettings()
   } catch (error) {
     console.error('Error saving settings:', error)
   } finally {
@@ -35,13 +35,18 @@ const handleReset = () => {
       <v-icon size="24" color="primary" class="mr-2">mdi-cog</v-icon>
       <v-toolbar-title class="text-h5 font-weight-bold">Utility Settings</v-toolbar-title>
       <v-spacer></v-spacer>
-      <v-chip size="small" color="grey-lighten-3" variant="flat" class="mr-2">
-        <v-icon start size="small">mdi-calendar-clock</v-icon>
-        Updated: {{ store.updatedAt || new Date().toLocaleDateString() }}
-      </v-chip>
     </v-toolbar>
 
     <v-card-text>
+      <v-text-field
+        label="Admin GCash Number"
+        v-model="store.gcashNumber"
+        type="text"
+        outlined
+        dense
+        hint="Enter GCash Number (11 digits)"
+        persistent-hint
+      />
       <v-text-field
         label="Electricity (₱)"
         v-model="store.electricity"
@@ -83,5 +88,10 @@ const handleReset = () => {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none !important; /* Remove default styling */
+  margin: 0 !important; /* Ensure no extra margin */
 }
 </style>

@@ -100,27 +100,53 @@ const handleConfirmPayment = async () => {
 
     console.log('💳 Processing payment for invoice:', invoiceId.value)
 
-    const { error } = await supabase.from('payment').insert([
+    // Insert Payment Record
+    const { error: paymentError } = await supabase.from('payment').insert([
       {
         amount: grandTotal.value,
         payment_method: 'GCash',
         payment_date: new Date().toISOString(),
-        status: 'pending',
+        status: 'approved',
         user_id: userId.value,
         invoice_id: invoiceId.value,
       },
     ])
 
-    if (error) {
-      console.error('⚠️ Error saving payment:', error)
-      alert('Failed to save payment: ' + error.message)
-    } else {
-      console.log('✅ Payment saved successfully')
-      alert('Payment saved successfully!')
-
-      // Refresh balance after payment
-      await fetchOutstandingBalance()
+    if (paymentError) {
+      console.error('⚠️ Error saving payment:', paymentError)
+      alert('Failed to save payment: ' + paymentError.message)
+      return
     }
+
+    console.log('✅ Payment saved successfully')
+
+    // Calculate next due date (1 month advance)
+    const nextDueDate = new Date()
+    nextDueDate.setMonth(nextDueDate.getMonth() + 1)
+    const formattedNextDueDate = nextDueDate.toISOString().slice(0, 10)
+
+    // Update Invoice (Reset Outstanding Balance & Advance Due Date)
+    const { error: invoiceUpdateError } = await supabase
+      .from('invoices')
+      .update({
+        outstanding_balance: 0, // Reset balance after payment
+        status: 'approved', // Mark as paid
+        due_date: formattedNextDueDate, // Move due date forward
+      })
+      .eq('invoice_id', invoiceId.value)
+
+    if (invoiceUpdateError) {
+      console.error('⚠️ Error updating invoice:', invoiceUpdateError)
+      alert('Failed to update invoice: ' + invoiceUpdateError.message)
+      return
+    }
+
+    console.log('✅ Invoice updated successfully. Outstanding balance reset.')
+
+    alert('Payment successful! Your outstanding balance is now 0.')
+
+    // Refresh balance after payment
+    await fetchOutstandingBalance()
   } catch (err) {
     console.error('⚠️ Unexpected error:', err)
   }
