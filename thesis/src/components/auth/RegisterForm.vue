@@ -2,12 +2,7 @@
 import { ref } from 'vue'
 import { signUp } from '@/api/auth.js' // Import the Supabase sign-up function
 import { useRouter } from 'vue-router' // For redirection
-import {
-  requiredValidator,
-  emailValidator,
-  passwordValidator,
-  confirmedValidator,
-} from '@/utils/validators' // Import custom validators
+import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators' // Import custom validators
 
 // Initialize router
 const router = useRouter()

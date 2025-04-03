@@ -84,11 +84,6 @@ const handleLogin = async () => {
     :error-messages="!requiredValidator(password) && password ? 'Password is required.' : ''"
   />
 
-  <div class="d-flex justify-space-between align-center">
-    <v-checkbox label="Remember Me" class="mt-n1" color="blue"></v-checkbox>
-    <a href="#" class="text-blue">Forgot Password?</a>
-  </div>
-
   <v-btn :loading="loading" @click="handleLogin" class="mb-5" color="#578e7e" dark block tile>
     Log in
   </v-btn>

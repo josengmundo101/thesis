@@ -153,14 +153,20 @@ export const useUtilityStore = defineStore('utility', () => {
       } = await supabase.auth.getUser()
       if (error || !user) throw new Error('No user is currently logged in.')
 
-      // Fetch user's invoice_id
+      // Fetch user's invoice_id and role
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('invoice_id')
+        .select('invoice_id, role') // Fetch role as well
         .eq('user_id', user.id)
         .single()
 
       if (userError) throw userError
+
+      // 🛑 Prevent admins from getting an invoice
+      if (userData?.role === 'admin') {
+        console.log('🛑 Admin detected. No invoice assigned.')
+        return
+      }
 
       // If user has no invoice, create a new one with due_date 1 month ahead
       if (!userData?.invoice_id) {

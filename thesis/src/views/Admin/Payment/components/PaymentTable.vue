@@ -71,7 +71,7 @@ const changeStatus = () => {
           </td>
           <td>
             <v-btn
-              v-if="item.status !== 'approved' && item.status !== 'rejected'"
+              v-if="item.status === 'pending'"
               color="success"
               class="mr-2"
               @click="openDialog(item, 'approved')"

@@ -40,7 +40,7 @@ const fetchPayments = async () => {
         day: 'numeric',
         year: 'numeric',
       }),
-      status: payment.status,
+      status: payment.status || 'pending', // Ensure 'pending' if status is missing
       invoice_id: payment.invoice_id,
     }))
   } catch (error) {

@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useRouter } from 'vue-router'
 import { signIn } from '@/api/auth' // Import the Supabase login function
-import { requiredValidator, emailValidator } from '@/utils/validators' // Import validators
+import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators' // Import validators
 
 const router = useRouter()
 
@@ -71,6 +71,7 @@ const handleLogin = async () => {
     color="blue"
     class="mt-4"
     type="email"
+    :rules="[requiredValidator]"
     :error-messages="!emailValidator(email) && email ? 'Enter a valid email address.' : ''"
   />
   <v-text-field
@@ -80,15 +81,18 @@ const handleLogin = async () => {
     dense
     color="blue"
     type="password"
-    :error-messages="!requiredValidator(password) && password ? 'Password is required.' : ''"
+    :rules="[requiredValidator]"
+    :error-messages="!passwordValidator(password) && password ? 'Password is required.' : ''"
   />
 
-  <div class="d-flex justify-space-between align-center">
-    <v-checkbox label="Remember Me" class="mt-n1" color="blue"></v-checkbox>
-    <a href="#" class="text-blue">Forgot Password?</a>
-  </div>
+  <v-alert v-if="errorMessage" type="error" dense class="mb-2">
+    {{ errorMessage }}
+  </v-alert>
+  <v-alert v-if="successMessage" type="success" dense class="mb-2">
+    {{ successMessage }}
+  </v-alert>
 
-  <v-btn :loading="loading" @click="handleLogin" class="mb-5" color="#578e7e" dark block tile>
+  <v-btn :loading="loading" @click="handleLogin" class="mb-5 mt-12" color="#578e7e" dark block tile>
     Log in
   </v-btn>
 
@@ -96,6 +100,4 @@ const handleLogin = async () => {
     Don't have an account?
     <RouterLink class="text-primary" to="/register">Sign Up</RouterLink>
   </p>
-
-  <p v-if="errorMessage" class="text-red text-caption text-center">{{ errorMessage }}</p>
 </template>

@@ -5,6 +5,7 @@ import StatCard from './components/StatCard.vue'
 import PendingConfirmedChart from './components/PendingConfirmedChart.vue'
 import RevenueChart from './components/RevenueChart.vue'
 import MonthlyRevenue from './components/MonthlyRevenue.vue'
+import RoomRevenue from './components/RoomRevenue.vue'
 
 // State Variables
 const totalTenants = ref(0)
@@ -97,7 +98,9 @@ onMounted(() => {
 
     <v-row dense>
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="users" :value="totalTenants" label="Total tenants" />
+        <RouterLink to="tenants"
+          ><StatCard color="white" flat icon="users" :value="totalTenants" label="Total tenants"
+        /></RouterLink>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
@@ -137,6 +140,9 @@ onMounted(() => {
         <PendingConfirmedChart color="white" flat />
       </v-col>
       <v-col cols="12" md="6">
+        <RoomRevenue color="white" flat />
+      </v-col>
+      <v-col cols="12">
         <RevenueChart color="white" flat />
       </v-col>
     </v-row>
@@ -169,6 +175,10 @@ onMounted(() => {
 
 .delay-100 {
   animation-delay: 100ms;
+}
+
+a {
+  text-decoration: none;
 }
 
 @keyframes fadeInUp {

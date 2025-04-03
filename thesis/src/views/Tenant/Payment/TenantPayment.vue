@@ -106,7 +106,7 @@ const handleConfirmPayment = async () => {
         amount: grandTotal.value,
         payment_method: 'GCash',
         payment_date: new Date().toISOString(),
-        status: 'approved',
+        status: 'pending',
         user_id: userId.value,
         invoice_id: invoiceId.value,
       },

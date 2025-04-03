@@ -1,56 +1,53 @@
 <template>
-  <v-card class="hover-scale fade-in delay-100">
+  <v-card class="pa-4 fade-in delay-100">
     <!-- Card Header -->
-    <v-card-title class="pb-2 mt-3 text-h6 font-weight-medium"> Monthly Revenue </v-card-title>
+    <v-card-title class="text-h6 font-weight-medium">Annual Revenue</v-card-title>
 
-    <!-- Card Content -->
+    <!-- Chart -->
     <v-card-text>
       <div class="chart-container">
-        <VueApexCharts type="bar" height="300" :options="chartOptions" :series="series" />
+        <VueApexCharts type="area" height="300" :options="chartOptions" :series="series" />
       </div>
     </v-card-text>
   </v-card>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
 import VueApexCharts from 'vue3-apexcharts'
 
-// Revenue Data
+// Define years for labels (for example, from 2025 to 2035)
+const yearsRange = Array.from({ length: 11 }, (_, index) => 2025 + index)
+
+// Reactive state for chart data
 const series = ref([
   {
     name: 'Revenue',
-    data: [4000, 6000, 5000, 8000, 7000, 9500, 8500, 10000, 11000, 9000, 12000, 15000],
+    data: Array(11).fill(0), // Default values (0) for each year (2025 - 2035)
   },
 ])
 
-// Chart Options
+// Chart configuration with years as labels
 const chartOptions = ref({
   chart: {
-    type: 'bar',
+    type: 'area',
     toolbar: { show: false },
   },
   xaxis: {
-    categories: [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ],
+    categories: yearsRange.map((year) => year.toString()), // Use year labels
   },
-  colors: ['#81C784'],
-  plotOptions: {
-    bar: {
-      borderRadius: 4,
-      columnWidth: '50%',
+  colors: ['#81C784'], // Green color for revenue trend
+  stroke: {
+    curve: 'smooth',
+  },
+  fill: {
+    type: 'gradient',
+    gradient: {
+      shadeIntensity: 1,
+      opacityFrom: 0.6,
+      opacityTo: 0.1,
+      stops: [20, 100],
     },
   },
   dataLabels: {
@@ -59,10 +56,45 @@ const chartOptions = ref({
   tooltip: {
     theme: 'light',
     y: {
-      formatter: (value) => `$${value}`,
+      formatter: (value) => `₱${value.toLocaleString()}`,
     },
   },
 })
+
+// Fetch annual revenue data from Supabase
+const fetchAnnualRevenueData = async () => {
+  try {
+    let { data: payments, error } = await supabase
+      .from('payment')
+      .select('amount, status, payment_date')
+
+    if (error) throw error
+    if (!payments) return
+
+    // Initialize an array with 11 years (2025 - 2035) filled with 0 revenue
+    const revenueData = Array(11).fill(0)
+
+    // Process payments by year
+    payments.forEach(({ amount, status, payment_date }) => {
+      if (status === 'approved') {
+        const year = new Date(payment_date).getFullYear()
+        const yearIndex = year - 2025 // Mapping to index 0 for 2025, 1 for 2026, etc.
+
+        if (year >= 2025 && year <= 2035) {
+          revenueData[yearIndex] += amount
+        }
+      }
+    })
+
+    // Update chart data
+    series.value[0].data = revenueData
+  } catch (error) {
+    console.error('Error fetching annual revenue data:', error.message)
+  }
+}
+
+// Fetch data on mount
+onMounted(fetchAnnualRevenueData)
 </script>
 
 <style scoped>
