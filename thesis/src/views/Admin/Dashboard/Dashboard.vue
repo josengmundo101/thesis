@@ -104,33 +104,36 @@ onMounted(() => {
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard
-          color="white"
-          flat
-          icon="clock"
-          :value="pendingPayments"
-          label="Pending payments"
-        />
+        <RouterLink to="reports"
+          ><StatCard
+            color="white"
+            flat
+            icon="clock"
+            :value="pendingPayments"
+            label="Pending payments"
+        /></RouterLink>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard
-          color="white"
-          flat
-          icon="credit-card"
-          :value="confirmedPayments"
-          label="Confirmed payments"
-        />
+        <RouterLink to="payments"
+          ><StatCard
+            color="white"
+            flat
+            icon="credit-card"
+            :value="confirmedPayments"
+            label="Confirmed payments"
+        /></RouterLink>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard
-          color="white"
-          flat
-          icon="chart"
-          :value="formatCurrency(totalRevenue)"
-          label="Total revenue"
-        />
+        <RouterLink to="reports"
+          ><StatCard
+            color="white"
+            flat
+            icon="chart"
+            :value="formatCurrency(totalRevenue)"
+            label="Total revenue"
+        /></RouterLink>
       </v-col>
     </v-row>
 

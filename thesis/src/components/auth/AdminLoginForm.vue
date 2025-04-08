@@ -10,6 +10,7 @@ const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
+const showPassword = ref(false) // New state for toggling password visibility
 
 // Handle Admin Login
 const handleLogin = async () => {
@@ -80,11 +81,13 @@ const handleLogin = async () => {
     outlined
     dense
     color="blue"
-    type="password"
+    :type="showPassword ? 'text' : 'password'"
+    :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+    @click:append-inner="showPassword = !showPassword"
     :error-messages="!requiredValidator(password) && password ? 'Password is required.' : ''"
   />
 
-  <v-btn :loading="loading" @click="handleLogin" class="mb-5" color="#578e7e" dark block tile>
+  <v-btn :loading="loading" @click="handleLogin" class="mt-12" color="#578e7e" dark block tile>
     Log in
   </v-btn>
 

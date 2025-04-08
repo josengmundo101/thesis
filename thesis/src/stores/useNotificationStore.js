@@ -1,33 +1,53 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, toRaw } from 'vue'
 
 export const useNotificationStore = defineStore('notification', () => {
   const notifications = ref([])
 
-  // ✅ Load stored notifications when the store initializes
-  const loadNotifications = () => {
-    const saved = localStorage.getItem('notifications')
-    if (saved) {
-      notifications.value = JSON.parse(saved)
+  // 1. Reliable storage methods
+  const saveToStorage = () => {
+    try {
+      localStorage.setItem(
+        'notification-store',
+        JSON.stringify({ notifications: toRaw(notifications.value) }), // Remove Proxy
+      )
+    } catch (error) {
+      console.error('Storage error:', error)
+      // Handle quota exceeded (e.g., trim old notifications)
+      notifications.value = notifications.value.slice(0, 50)
+      saveToStorage()
     }
   }
 
-  // ✅ Add a new notification and store it
-  const addNotification = (message) => {
-    notifications.value.push({ id: Date.now(), message })
+  // 2. Modified addNotification
+  const addNotification = (notification) => {
+    const newNotif = {
+      id: Date.now(),
+      ...notification,
+      timestamp: new Date().toISOString(),
+    }
+
+    notifications.value = [newNotif, ...notifications.value] // New array to trigger reactivity
+    saveToStorage() // Explicit save
+    return newNotif
   }
 
-  // ✅ Watch for changes and store updates
-  watch(
-    notifications,
-    (newVal) => {
-      localStorage.setItem('notifications', JSON.stringify(newVal))
-    },
-    { deep: true },
-  )
+  // 3. Initialize (handle both formats)
+  const init = () => {
+    try {
+      const raw = localStorage.getItem('notification-store')
+      if (!raw) return
 
-  // ✅ Load data when the store is first created
-  loadNotifications()
+      const data = JSON.parse(raw)
+      notifications.value = data?.notifications || []
+      console.log('Initialized notifications:', notifications.value)
+    } catch (error) {
+      console.error('Init error:', error)
+      localStorage.removeItem('notification-store') // Clear corrupt data
+    }
+  }
 
-  return { notifications, addNotification, loadNotifications }
+  init() // Run on store creation
+
+  return { notifications, addNotification, init }
 })

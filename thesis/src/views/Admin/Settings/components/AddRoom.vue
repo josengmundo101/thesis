@@ -5,6 +5,7 @@ import { supabase } from '@/utils/supabase'
 // Reactive form fields
 const roomNumber = ref('')
 const capacity = ref(null)
+const buildingName = ref('') // 🔹 New field
 const loading = ref(false)
 const successMessage = ref('')
 const errorMessage = ref('')
@@ -14,7 +15,7 @@ const addRoom = async () => {
   successMessage.value = ''
   errorMessage.value = ''
 
-  if (!roomNumber.value || !capacity.value) {
+  if (!roomNumber.value || !capacity.value || !buildingName.value) {
     errorMessage.value = 'Please fill in all fields.'
     return
   }
@@ -27,6 +28,7 @@ const addRoom = async () => {
       {
         room_number: roomNumber.value,
         capacity: capacity.value,
+        building_name: buildingName.value, // 🔹 Include this
       },
     ])
 
@@ -36,6 +38,7 @@ const addRoom = async () => {
     // Clear form fields
     roomNumber.value = ''
     capacity.value = null
+    buildingName.value = ''
   } catch (error) {
     errorMessage.value = error.message || 'Failed to add room. Try again.'
   } finally {
@@ -60,6 +63,15 @@ const addRoom = async () => {
         dense
         required
         min="1"
+      />
+
+      <v-text-field
+        label="Building Name"
+        v-model="buildingName"
+        type="text"
+        outlined
+        dense
+        required
       />
 
       <v-alert v-if="errorMessage" type="error" dense class="mt-2">

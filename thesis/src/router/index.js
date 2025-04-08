@@ -18,7 +18,6 @@ import SettingsPage from '@/views/Admin/Settings/SettingsPage.vue'
 import TenantDashboard from '@/views/Tenant/Dashboard/TenantDashboard.vue'
 import TenantLayout from '@/components/layout/TenantLayout.vue'
 import TenantPayment from '@/views/Tenant/Payment/TenantPayment.vue'
-import TenantHistory from '@/views/Tenant/History/TenantHistory.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -62,7 +61,6 @@ const router = createRouter({
       children: [
         { path: 'tenantDashboard', name: 'tenantDashboard', component: TenantDashboard },
         { path: 'tenantPayment', name: 'tenantPayment', component: TenantPayment },
-        { path: 'tenantHistory', name: 'tenantHistory', component: TenantHistory },
       ],
     },
   ],

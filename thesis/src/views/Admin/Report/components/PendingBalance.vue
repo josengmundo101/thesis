@@ -1,9 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { supabase } from '@/utils/supabase'
-import { useNotificationStore } from '@/stores/useNotificationStore'
-
-const notificationStore = useNotificationStore()
+// import { useNotificationStore } from '@/stores/useNotificationStore'
 const pendingBalances = ref([])
 
 const isPrinting = ref(false)
@@ -156,7 +154,7 @@ const fetchPendingBalances = async () => {
 
     if (error) throw error
 
-    console.log('Raw Data:', JSON.stringify(data, null, 2))
+    console.log('PendingBalances - Raw Data:', JSON.stringify(data, null, 2))
 
     pendingBalances.value = data.map((invoice) => {
       const user = invoice.users?.[0] || {}
@@ -167,10 +165,19 @@ const fetchPendingBalances = async () => {
         ? Math.max(0, Math.floor((new Date() - new Date(invoice.due_date)) / (1000 * 60 * 60 * 24)))
         : 0
 
+      console.log(
+        'PendingBalances - Mapped user_id for',
+        user.firstname,
+        user.lastname,
+        ':',
+        user.user_id,
+      )
+
       return {
         id: invoice.invoice_id,
         firstname: user.firstname,
         lastname: user.lastname,
+        userId: user.user_id,
         room: room.room_number,
         bedSide: assignment.bed_side,
         dateAssigned: assignment.date_assigned
@@ -190,13 +197,14 @@ const fetchPendingBalances = async () => {
       }
     })
 
-    console.log('Processed Data:', pendingBalances.value)
+    console.log('PendingBalances - Processed Data:', JSON.stringify(pendingBalances.value, null, 2))
   } catch (err) {
-    console.error('Error:', err)
+    console.error('PendingBalances - Error fetching:', err)
   }
 }
 
 onMounted(() => {
+  console.log('PendingBalances - Current origin:', window.location.origin)
   fetchPendingBalances()
 })
 
@@ -279,36 +287,47 @@ const getSortIcon = (column) => {
 
 const sendReminder = async () => {
   try {
-    const { data: tenants, error } = await supabase
-      .from('users')
-      .select(
-        `
-        user_id,
-        firstname,
-        role,
-        invoices ( outstanding_balance )
-      `,
-      )
-      .eq('role', 'tenant')
-      .gt('invoices.outstanding_balance', 0)
+    console.log('PendingBalances - Starting to send reminders')
 
-    if (error) throw error
-    if (!tenants.length) return console.log('No tenants with pending balances.')
+    if (!pendingBalances.value.length) {
+      const { error } = await supabase.from('notifications').insert({
+        message: 'No tenants with pending balances to notify',
+        type: 'info',
+      })
+      if (error) throw error
+      console.log('PendingBalances - No pending tenants, notification saved to Supabase')
+      return
+    }
 
-    tenants.forEach((tenant) => {
-      const message = `Reminder: ${tenant.firstname}, please pay your outstanding balance.`
+    console.log('PendingBalances - Sending reminders to', pendingBalances.value.length, 'tenants')
 
-      console.log(`📢 Notification sent to ${tenant.firstname}: "${message}"`)
-
-      // ✅ Add notification to store
-      console.log('📢 Sending notification...')
-
-      notificationStore.addNotification(message) // ✅ Add to Pinia store
-      console.log('📢 Updated Notifications:', notificationStore.notifications) // ✅
+    const notifications = pendingBalances.value.map((tenant) => {
+      const fullName = `${tenant.firstname} ${tenant.lastname}`.trim() || 'Unnamed Tenant'
+      const message = `Reminder: ${fullName}, you have ₱${tenant.amountDue} due on ${tenant.dueDate || 'N/A'}${tenant.daysOverdue > 0 ? ` (${tenant.daysOverdue} days overdue)` : ''}`
+      console.log('PendingBalances - Preparing reminder for tenantIdentifier:', tenant.userId)
+      return {
+        message,
+        type: 'reminder',
+        tenant_identifier: tenant.userId,
+        status: tenant.status,
+      }
     })
+
+    notifications.unshift({
+      message: `Sent reminders to ${pendingBalances.value.length} tenant(s) with pending balances`,
+      type: 'success',
+    })
+
+    const { error } = await supabase.from('notifications').insert(notifications)
+    if (error) throw error
+
+    console.log('PendingBalances - Sent reminders, saved to Supabase')
   } catch (error) {
-    notificationStore.addNotification(`Reminder failed: ${error.message}`, 'error')
-    console.error('Reminder error:', error)
+    console.error('PendingBalances - Error sending reminders:', error)
+    await supabase.from('notifications').insert({
+      message: `Failed to send reminders: ${error.message}`,
+      type: 'error',
+    })
   }
 }
 </script>
@@ -345,7 +364,7 @@ const sendReminder = async () => {
           class="pa-4 flex-grow-1 bg-primary-lighten-5 d-flex align-center"
         >
           <v-avatar color="primary" class="mr-3">
-            <v-icon color="white">mdi-currency-usd</v-icon>
+            <v-icon color="white">mdi-currency-php</v-icon>
           </v-avatar>
           <div>
             <div class="text-caption text-medium-emphasis">Total Outstanding</div>

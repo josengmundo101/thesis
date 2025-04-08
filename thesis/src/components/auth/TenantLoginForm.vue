@@ -12,6 +12,7 @@ const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
+const showPassword = ref(false) // New state for toggling password visibility
 
 // Handle Tenant Login
 const handleLogin = async () => {
@@ -80,16 +81,15 @@ const handleLogin = async () => {
     outlined
     dense
     color="blue"
-    type="password"
+    :type="showPassword ? 'text' : 'password'"
+    :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+    @click:append-inner="showPassword = !showPassword"
     :rules="[requiredValidator]"
     :error-messages="!passwordValidator(password) && password ? 'Password is required.' : ''"
   />
 
   <v-alert v-if="errorMessage" type="error" dense class="mb-2">
     {{ errorMessage }}
-  </v-alert>
-  <v-alert v-if="successMessage" type="success" dense class="mb-2">
-    {{ successMessage }}
   </v-alert>
 
   <v-btn :loading="loading" @click="handleLogin" class="mb-5 mt-12" color="#578e7e" dark block tile>

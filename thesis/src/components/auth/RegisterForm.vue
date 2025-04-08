@@ -4,6 +4,7 @@ import { signUp } from '@/api/auth.js' // Import the Supabase sign-up function
 import { useRouter } from 'vue-router' // For redirection
 import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators' // Import custom validators
 
+const showPassword = ref(false) // State for toggling password visibility
 // Initialize router
 const router = useRouter()
 
@@ -150,7 +151,9 @@ const confirmPasswordValidator = (value) => {
         outlined
         dense
         color="blue"
-        type="password"
+        :type="showPassword ? 'text' : 'password'"
+        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showPassword = !showPassword"
         :rules="[requiredValidator, passwordValidator]"
       />
     </v-col>
@@ -162,7 +165,9 @@ const confirmPasswordValidator = (value) => {
         outlined
         dense
         color="blue"
-        type="password"
+        :type="showPassword ? 'text' : 'password'"
+        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showPassword = !showPassword"
         :rules="[requiredValidator, confirmPasswordValidator]"
       />
     </v-col>

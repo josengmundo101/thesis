@@ -21,7 +21,7 @@ const props = defineProps({
 })
 
 // Emits for actions
-const emit = defineEmits(['pageChange', 'viewDetails', 'assignRoom'])
+const emit = defineEmits(['pageChange', 'viewDetails', 'assignRoom', 'view-ledger'])
 
 // Local page state (avoid direct prop mutation)
 const pageNumber = ref(props.page)
@@ -106,6 +106,8 @@ const getRoomDetails = (tenant) => {
           </td>
 
           <td>
+            <v-btn color="primary" @click="$emit('view-ledger', tenant)"> View Ledger </v-btn>
+
             <v-btn size="small" variant="text" color="primary" @click="emit('viewDetails', tenant)">
               <v-icon left>mdi-eye</v-icon> View
             </v-btn>

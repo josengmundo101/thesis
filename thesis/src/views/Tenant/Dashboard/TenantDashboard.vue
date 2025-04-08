@@ -1,21 +1,16 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import BillingCard from './components/BillingCard.vue'
 import SummaryCard from './components/SummaryCard.vue'
 import NotificationCard from './components/NotificationCard.vue'
-import { useNotificationStore } from '@/stores/useNotificationStore'
-// State
-const summary = ref({
-  balance: 0,
-  dueDate: '',
-})
+import TenantHistory from './components/TenantHistory.vue'
 
-const notificationStore = useNotificationStore()
+const summary = ref({ balance: 0, dueDate: '' })
+const tenantName = ref('Tenant')
+const userId = ref(null)
+const notifications = ref([])
 
-const tenantName = ref('Tenant') // Default to "Tenant"
-
-// Fetch Tenant Details
 const fetchTenantDetails = async () => {
   try {
     const {
@@ -24,23 +19,22 @@ const fetchTenantDetails = async () => {
     } = await supabase.auth.getUser()
     if (userError) throw userError
     if (!user) throw new Error('No user is currently logged in.')
-
-    console.log('✅ User ID:', user.id)
+    userId.value = user.id
+    console.log('TenantDashboard - Auth User ID:', userId.value)
 
     const { data: tenantData, error: tenantError } = await supabase
       .from('users')
       .select(
         `firstname, lastname, invoice_id, invoices (total_amount, outstanding_balance, due_date)`,
       )
-      .eq('user_id', user.id)
+      .eq('user_id', userId.value)
       .single()
 
     if (tenantError) throw tenantError
-    console.log('✅ Tenant Data:', tenantData)
+    console.log('TenantDashboard - Tenant Data:', JSON.stringify(tenantData, null, 2))
 
     if (tenantData) {
       tenantName.value = `${tenantData.firstname} ${tenantData.lastname}`
-
       if (tenantData.invoices) {
         summary.value = {
           balance: tenantData.invoices.outstanding_balance,
@@ -49,21 +43,52 @@ const fetchTenantDetails = async () => {
       }
     }
   } catch (error) {
-    console.error('🛑 Error fetching tenant details:', error.message)
+    console.error('TenantDashboard - Error fetching tenant details:', error.message)
   }
 }
 
-// Fetch Data on Mount
+const fetchNotifications = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(50)
+    if (error) throw error
+    notifications.value = data
+    console.log(
+      'TenantDashboard - Fetched notifications from Supabase:',
+      JSON.stringify(notifications.value, null, 2),
+    )
+  } catch (error) {
+    console.error('TenantDashboard - Error fetching notifications:', error)
+  }
+}
+
+const tenantNotifications = computed(() => {
+  if (!userId.value) return []
+  const filtered = notifications.value.filter(
+    (notification) => notification.tenant_identifier === userId.value,
+  )
+  console.log(
+    'TenantDashboard - Computed tenantNotifications for user',
+    userId.value,
+    ':',
+    JSON.stringify(filtered, null, 2),
+  )
+  return filtered
+})
+
 onMounted(() => {
+  console.log('TenantDashboard - Current origin:', window.location.origin)
   fetchTenantDetails()
-  notificationStore.loadNotifications() // ✅ Load notifications
-  console.log('📢 Tenant Notifications:', notificationStore.notifications) // ✅ Log state
+  fetchNotifications()
 })
 </script>
 
 <template>
   <v-container class="mt-8">
-    <v-row class="mb-6">
+    <v-row class="mb-3">
       <v-col cols="12" class="hover-scale fade-in delay-100">
         <h2 class="text-h4 font-weight-bold text-white">Welcome, {{ tenantName }}!</h2>
         <p class="text-body-1 text-grey-lighten-1">
@@ -72,21 +97,24 @@ onMounted(() => {
       </v-col>
     </v-row>
 
-    <!-- Billing & Summary Cards -->
-    <v-row class="mb-6">
+    <v-row class="mb-3">
       <v-col cols="12" md="6">
         <BillingCard />
       </v-col>
-
       <v-col cols="12" md="6">
         <SummaryCard :balance="summary.balance" :dueDate="summary.dueDate" />
       </v-col>
     </v-row>
 
-    <!-- Notifications -->
     <v-row>
       <v-col cols="12">
-        <NotificationCard :notifications="notificationStore.notifications" />
+        <NotificationCard :notifications="tenantNotifications" />
+      </v-col>
+    </v-row>
+
+    <v-row>
+      <v-col cols="12">
+        <TenantHistory />
       </v-col>
     </v-row>
   </v-container>

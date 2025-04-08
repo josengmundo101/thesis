@@ -1,7 +1,8 @@
 <script setup>
-// ✅ Define props for total values
-import { defineProps, defineEmits } from 'vue'
+import { defineProps, defineEmits, ref } from 'vue'
+import PaymentConfirmation from './PaymentConfirmation.vue' // Adjust path as needed
 
+// Define props for total values
 const props = defineProps({
   grandTotal: {
     type: Number,
@@ -13,27 +14,40 @@ const props = defineProps({
   },
 })
 
-// ✅ Define emit for the payment confirmation event
+// Define emit for the payment confirmation event
 const emit = defineEmits(['confirm-payment'])
 
-// Call emit when a payment is confirmed
+// State to control dialog visibility
+const showConfirmationDialog = ref(false)
+
+// Handle payment initiation
 const handlePayment = () => {
-  // ... your payment logic here
-  emit('confirm-payment')
+  showConfirmationDialog.value = true // Show the confirmation dialog
 }
 
-// ✅ Usage inside logic (to prevent linter errors)
+// Handle final payment confirmation from the dialog
+const finalizePayment = () => {
+  showConfirmationDialog.value = false // Close the dialog
+  emit('confirm-payment') // Emit to parent after confirmation
+}
+
+// Debug logs
 console.log('Grand Total:', props.grandTotal)
 console.log('Current Total:', props.currentTotal)
 </script>
 
 <template>
   <v-card elevation="1" class="pa-4 text-center hover-scale fade-in delay-150">
-    <!-- ✅ Display grand total from props -->
+    <!-- Display grand total from props -->
     <v-card-text class="text-h6 font-weight-bold text-primary">
       Grand Total: ₱{{ grandTotal.toLocaleString() }}
     </v-card-text>
-    <!-- ✅ Emit payment confirmation on button click -->
-    <v-btn block color="primary" class="py-3" @click="handlePayment"> Pay with PayMongo </v-btn>
+    <!-- Trigger payment process -->
+    <v-btn block color="primary" class="py-3" @click="handlePayment"> Pay with Gcash </v-btn>
+
+    <!-- Payment Confirmation Dialog -->
+    <v-dialog v-model="showConfirmationDialog" max-width="600px" persistent>
+      <payment-confirmation :payment-amount="grandTotal" @confirm="finalizePayment" />
+    </v-dialog>
   </v-card>
 </template>

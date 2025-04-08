@@ -2,13 +2,12 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase' // ✅ Import Supabase
-import { signOut } from '@/api/auth' // ✅ Import your signOut function
+// Removed unused signOut import
 
 // Navigation links
 const menuItems = [
   { title: 'Overview', icon: 'mdi-view-dashboard', to: '/tenant/TenantDashboard' },
   { title: 'Payment', icon: 'mdi-credit-card', to: '/tenant/TenantPayment' },
-  { title: 'History', icon: 'mdi-history', to: '/tenant/TenantHistory' },
 ]
 
 // Reactive States

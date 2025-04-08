@@ -6,6 +6,7 @@ import SearchBar from './components/SearchBar.vue'
 import TenantTable from './components/TenantTable.vue'
 import ViewDetails from './components/ViewDetails.vue'
 import AssignRoom from './components/AssignRoom.vue'
+import TenantLedger from './components/TenantLedger.vue'
 
 const toast = useToast()
 const tenants = ref([])
@@ -17,6 +18,7 @@ const selectedTenant = ref(null)
 const detailsModalOpen = ref(false)
 const assignModalOpen = ref(false)
 const ITEMS_PER_PAGE = 5
+const showLedger = ref(false)
 
 // 🔍 Fetch tenants from Supabase where role = 'tenant'
 
@@ -105,6 +107,11 @@ const handleUpdateTenant = (updatedTenant) => {
     fetchTenants()
   }
 }
+
+const openLedger = (tenant) => {
+  selectedTenant.value = tenant
+  showLedger.value = true
+}
 </script>
 
 <template>
@@ -134,6 +141,7 @@ const handleUpdateTenant = (updatedTenant) => {
           @page-change="currentPage = $event"
           @view-details="handleViewDetails"
           @assign-room="handleAssignRoom"
+          @view-ledger="openLedger"
         />
       </v-col>
     </v-row>
@@ -150,6 +158,13 @@ const handleUpdateTenant = (updatedTenant) => {
     <v-alert v-if="errorMessage" type="error" class="my-4">
       {{ errorMessage }}
     </v-alert>
+
+    <!-- 📜 Tenant Ledger Modal -->
+    <TenantLedger
+      :isOpen="showLedger"
+      @update:isOpen="showLedger = $event"
+      :tenant="selectedTenant"
+    />
 
     <!-- 🔍 View Details Modal -->
     <ViewDetails
