@@ -7,6 +7,7 @@ import TenantTable from './components/TenantTable.vue'
 import ViewDetails from './components/ViewDetails.vue'
 import AssignRoom from './components/AssignRoom.vue'
 import TenantLedger from './components/TenantLedger.vue'
+import PendingTenantApproval from './components/PendingTenantsApproval.vue'
 
 const toast = useToast()
 const tenants = ref([])
@@ -143,6 +144,13 @@ const openLedger = (tenant) => {
           @assign-room="handleAssignRoom"
           @view-ledger="openLedger"
         />
+      </v-col>
+    </v-row>
+
+    <!-- 🕵️ Pending Tenants Waiting for Approval -->
+    <v-row class="mb-6">
+      <v-col cols="12">
+        <PendingTenantApproval />
       </v-col>
     </v-row>
 

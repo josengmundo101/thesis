@@ -1,5 +1,6 @@
 import { supabase, formActionDefault } from '@/utils/supabase'
 import router from '@/router'
+import { toast } from 'vue3-toastify'
 
 // Function to generate the next custom ID based on the last entry
 const generateCustomID = async (role) => {
@@ -30,51 +31,52 @@ const generateCustomID = async (role) => {
 
 // 🔹 Register User (Creates Admin if First User)
 export const signUp = async (userData) => {
-  let action = { ...formActionDefault } // Initialize form state
+  let action = { ...formActionDefault }
 
   try {
     action.formProcess = true
 
-    // Check if this is the first user
+    // Check if this is the first user (make them admin)
     const { count, error: countError } = await supabase
       .from('users')
       .select('*', { count: 'exact', head: true })
     if (countError) throw countError
 
-    // Determine role
     const role = count === 0 ? 'admin' : 'tenant'
-
-    // Generate Custom ID (e.g., TENANT-001)
+    const status = role === 'tenant' ? 'pending' : null
     const customId = await generateCustomID(role)
 
-    // ✅ Step 1: Sign up user in Supabase Auth
+    // ✅ Step 1: Register in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password,
     })
     if (authError) throw authError
 
-    // ✅ Step 2: Insert user details into the "users" table
+    // ✅ Step 2: Insert user profile into 'users' table
     const { error: insertError } = await supabase.from('users').insert([
       {
-        user_id: authData.user.id, // Supabase Auth User ID
+        user_id: authData.user.id,
         email: userData.email,
         firstname: userData.firstname,
         lastname: userData.lastname,
         address: userData.address,
         contact_number: userData.contact_number,
-        role, // Automatically assign role (admin or tenant)
+        role,
         custom_id: customId,
+        ...(status && { status }), // Only include status if it's a tenant
       },
     ])
     if (insertError) throw insertError
 
-    // ✅ Success Message
+    // ✅ Final Response
     action.formStatus = 200
-    action.formSuccessMessage = `Account created successfully as ${role.toUpperCase()}!`
-    return { ...action, user: authData.user } // Return user data for frontend usage
+    action.formSuccessMessage =
+      role === 'tenant'
+        ? 'Account created successfully! Please wait for admin approval before signing in.'
+        : 'Admin account created successfully!'
+    return { ...action, user: authData.user }
   } catch (error) {
-    // ❌ Error Handling
     action.formStatus = 400
     action.formErrorMessage = error.message || 'Registration failed.'
     return { ...action }
@@ -108,16 +110,28 @@ export const signIn = async (email, password) => {
 
     const user = data.user
 
-    // Fetch user role from the database
-    const { data: userData, error: userError } = await supabase
+    // Fetch user details from the database
+    const { data: profile, error: userError } = await supabase
       .from('users')
-      .select('role')
+      .select('role, status') // Fetch both role and status
       .eq('user_id', user.id)
       .single()
 
     if (userError) throw userError
 
-    const role = userData.role
+    const role = profile.role
+    const status = profile.status
+
+    // Check if the user's status is approved
+    if (status !== 'approved') {
+      // Sign out and show warning
+      await supabase.auth.signOut()
+      toast.warning('Your account is not approved yet. Please wait for admin confirmation.')
+      action.formStatus = 403 // Forbidden status for unapproved account
+      action.formErrorMessage =
+        'Your account is not approved yet. Please wait for admin confirmation.'
+      return { ...action }
+    }
 
     // 🔹 Store role in localStorage to prevent session switching
     localStorage.setItem('user_role', role)
@@ -126,15 +140,16 @@ export const signIn = async (email, password) => {
     if (role === 'admin') {
       router.push('/admin/dashboard')
     } else {
-      router.push('/tenant/tenantDashboard')
+      router.push('/tenant/tenantDashboard') // Adjusted to match your path
     }
 
-    console.log('✅ Login Success:', user, 'Role:', role)
+    console.log('✅ Login Success:', user, 'Role:', role, 'Status:', status)
     action.formStatus = 200
     action.formSuccessMessage = `Welcome back!`
     return { ...action, user }
   } catch (error) {
     console.error('🛑 Login Failed:', error.message)
+    toast.error(error.message || 'Login failed.')
     action.formStatus = 400
     action.formErrorMessage = error.message || 'Login failed. Please try again.'
     return { ...action }
