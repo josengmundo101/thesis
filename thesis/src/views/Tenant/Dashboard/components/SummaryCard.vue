@@ -134,9 +134,6 @@ onBeforeUnmount(() => {
       <v-btn color="primary" variant="flat">
         <RouterLink to="/tenant/TenantPayment">Make Payment</RouterLink>
       </v-btn>
-      <v-btn color="secondary" variant="flat">
-        <RouterLink to="/tenant/TenantHistory">History</RouterLink>
-      </v-btn>
     </v-card-actions>
   </v-card>
 </template>
