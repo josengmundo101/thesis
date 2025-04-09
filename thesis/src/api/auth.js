@@ -36,24 +36,23 @@ export const signUp = async (userData) => {
   try {
     action.formProcess = true
 
-    // Check if this is the first user (make them admin)
     const { count, error: countError } = await supabase
       .from('users')
       .select('*', { count: 'exact', head: true })
     if (countError) throw countError
 
+    console.log('✅ User Count:', count)
+
     const role = count === 0 ? 'admin' : 'tenant'
     const status = role === 'tenant' ? 'pending' : null
     const customId = await generateCustomID(role)
 
-    // ✅ Step 1: Register in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password,
     })
     if (authError) throw authError
 
-    // ✅ Step 2: Insert user profile into 'users' table
     const { error: insertError } = await supabase.from('users').insert([
       {
         user_id: authData.user.id,
@@ -64,18 +63,20 @@ export const signUp = async (userData) => {
         contact_number: userData.contact_number,
         role,
         custom_id: customId,
-        ...(status && { status }), // Only include status if it's a tenant
+        ...(status && { status }),
       },
     ])
     if (insertError) throw insertError
 
-    // ✅ Final Response
+    await supabase.auth.signOut()
+    localStorage.removeItem('user_role') // Clear role to prevent conflicts
+
     action.formStatus = 200
     action.formSuccessMessage =
       role === 'tenant'
         ? 'Account created successfully! Please wait for admin approval before signing in.'
         : 'Admin account created successfully!'
-    return { ...action, user: authData.user }
+    return { ...action, user: authData.user, role }
   } catch (error) {
     action.formStatus = 400
     action.formErrorMessage = error.message || 'Registration failed.'
@@ -92,7 +93,6 @@ export const signIn = async (email, password) => {
   try {
     if (!email || !password) throw new Error('Email and Password are required.')
 
-    // Authenticate with Supabase
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -110,37 +110,35 @@ export const signIn = async (email, password) => {
 
     const user = data.user
 
-    // Fetch user details from the database
     const { data: profile, error: userError } = await supabase
       .from('users')
-      .select('role, status') // Fetch both role and status
+      .select('role, status')
       .eq('user_id', user.id)
       .single()
 
     if (userError) throw userError
 
+    console.log('✅ Fetched Profile:', profile) // Add this log
+
     const role = profile.role
     const status = profile.status
 
-    // Check if the user's status is approved
     if (status !== 'approved') {
-      // Sign out and show warning
       await supabase.auth.signOut()
       toast.warning('Your account is not approved yet. Please wait for admin confirmation.')
-      action.formStatus = 403 // Forbidden status for unapproved account
+      action.formStatus = 403
       action.formErrorMessage =
         'Your account is not approved yet. Please wait for admin confirmation.'
+      router.push('/login') // Explicitly redirect to /login
       return { ...action }
     }
 
-    // 🔹 Store role in localStorage to prevent session switching
     localStorage.setItem('user_role', role)
 
-    // 🔹 Redirect based on role
     if (role === 'admin') {
       router.push('/admin/dashboard')
     } else {
-      router.push('/tenant/tenantDashboard') // Adjusted to match your path
+      router.push('/tenant/tenantDashboard')
     }
 
     console.log('✅ Login Success:', user, 'Role:', role, 'Status:', status)

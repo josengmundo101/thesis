@@ -1,4 +1,3 @@
-<!-- PaymentConfirmation.vue -->
 <script setup>
 import { ref, onMounted, defineProps, defineEmits } from 'vue'
 import { supabase } from '@/utils/supabase' // Adjust path to your Supabase client
@@ -16,8 +15,8 @@ const props = defineProps({
   },
 })
 
-// Define emit for confirmation
-const emit = defineEmits(['confirm'])
+// Define emits - add 'close' to the list
+const emit = defineEmits(['confirm', 'close'])
 
 // Reactive data
 const userContact = ref('Loading...')
@@ -74,6 +73,11 @@ onMounted(async () => {
 const confirmPayment = () => {
   isConfirmed.value = true
   emit('confirm') // Emit to parent to finalize payment
+}
+
+// Close dialog action
+const closeDialog = () => {
+  emit('close')
 }
 </script>
 
@@ -146,7 +150,7 @@ const confirmPayment = () => {
           >
             Confirm Payment
           </v-btn>
-          <v-btn color="grey" variant="text" class="ml-2" @click="$emit('close')"> Cancel </v-btn>
+          <v-btn color="grey" variant="text" class="ml-2" @click="closeDialog"> Cancel </v-btn>
         </v-col>
       </v-row>
     </v-card-text>

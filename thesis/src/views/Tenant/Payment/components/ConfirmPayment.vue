@@ -31,6 +31,11 @@ const finalizePayment = () => {
   emit('confirm-payment') // Emit to parent after confirmation
 }
 
+// Add handler for close event
+const handleClose = () => {
+  showConfirmationDialog.value = false
+}
+
 // Debug logs
 console.log('Grand Total:', props.grandTotal)
 console.log('Current Total:', props.currentTotal)
@@ -47,7 +52,11 @@ console.log('Current Total:', props.currentTotal)
 
     <!-- Payment Confirmation Dialog -->
     <v-dialog v-model="showConfirmationDialog" max-width="600px" persistent>
-      <payment-confirmation :payment-amount="grandTotal" @confirm="finalizePayment" />
+      <payment-confirmation
+        :payment-amount="grandTotal"
+        @confirm="finalizePayment"
+        @close="handleClose"
+      />
     </v-dialog>
   </v-card>
 </template>

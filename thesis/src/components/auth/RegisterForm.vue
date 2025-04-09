@@ -3,11 +3,11 @@ import { ref } from 'vue'
 import { signUp } from '@/api/auth.js'
 import { useRouter } from 'vue-router'
 import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators'
+import { toast } from 'vue3-toastify'
 
 const showPassword = ref(false)
 const router = useRouter()
 
-// Form data
 const userData = ref({
   firstname: '',
   lastname: '',
@@ -18,24 +18,20 @@ const userData = ref({
   confirmPassword: '',
 })
 
-// Form state
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 
-// Handle Registration
 const handleRegister = async () => {
   errorMessage.value = ''
   successMessage.value = ''
 
-  // Trim input values
   Object.keys(userData.value).forEach((key) => {
     if (typeof userData.value[key] === 'string') {
       userData.value[key] = userData.value[key].trim()
     }
   })
 
-  // Validations
   if (!userData.value.firstname || !userData.value.lastname) {
     errorMessage.value = 'First name and Last name are required.'
     return
@@ -59,32 +55,33 @@ const handleRegister = async () => {
 
   try {
     loading.value = true
-    const { formStatus, formSuccessMessage, formErrorMessage, user } = await signUp(userData.value)
+    const { formStatus, formSuccessMessage, formErrorMessage, user, role } = await signUp(
+      userData.value,
+    )
 
     if (formStatus === 200) {
       successMessage.value = formSuccessMessage
-
-      // Check if user is admin (first registered)
-      const isAdmin = formSuccessMessage.toLowerCase().includes('admin')
+      toast.success(formSuccessMessage)
 
       setTimeout(() => {
-        if (isAdmin) {
+        if (role === 'admin') {
           router.replace('/admin/dashboard')
         } else {
-          router.replace('/login') // Tenant waits for approval
+          router.replace('/login')
         }
       }, 2000)
     } else {
       errorMessage.value = formErrorMessage
+      toast.error(formErrorMessage)
     }
   } catch (error) {
     errorMessage.value = error.message || 'Something went wrong.'
+    toast.error(error.message || 'Something went wrong.')
   } finally {
     loading.value = false
   }
 }
 
-// Validator for Confirm Password
 const confirmPasswordValidator = (value) => {
   if (!value) return 'Confirm password is required.'
   if (value !== userData.value.password) return 'Passwords do not match.'
