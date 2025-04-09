@@ -93,15 +93,15 @@ const fetchOutstandingBalance = async () => {
 
 // Calculate Totals
 const calculateTotals = () => {
-  currentTotal.value = Number(store.electricity) + Number(store.water) + Number(store.wifi)
+  currentTotal.value =
+    Number(store.rent) + Number(store.electricity) + Number(store.water) + Number(store.wifi)
   grandTotal.value = currentTotal.value + outstandingBalance.value
   console.log('✅ Current Total:', currentTotal.value)
   console.log('✅ Grand Total:', grandTotal.value)
 
-  // Emit updated values to parent
   emit('update-total', {
     currentTotal: currentTotal.value,
-    grandTotal: grandTotal.value,
+    grandTotal: currentTotal.value,
   })
 }
 
@@ -119,7 +119,7 @@ onMounted(async () => {
 })
 
 // Watch for changes
-watch([store.electricity, store.water, store.wifi, outstandingBalance], () => {
+watch([store.rent, store.electricity, store.water, store.wifi, outstandingBalance], () => {
   calculateTotals()
 })
 </script>
@@ -130,6 +130,17 @@ watch([store.electricity, store.water, store.wifi, outstandingBalance], () => {
     <v-divider></v-divider>
     <v-card-text>
       <v-list density="compact">
+        <!-- Rent -->
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon color="deep-orange">mdi-home-city</v-icon>
+          </template>
+          <v-list-item-title>Rent</v-list-item-title>
+          <v-list-item-subtitle class="font-weight-bold text-primary">
+            ₱{{ store.rent }}
+          </v-list-item-subtitle>
+        </v-list-item>
+
         <!-- Electricity -->
         <v-list-item>
           <template v-slot:prepend>

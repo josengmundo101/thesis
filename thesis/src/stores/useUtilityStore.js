@@ -7,16 +7,17 @@ export const useUtilityStore = defineStore('utility', () => {
   const electricity = ref(0)
   const water = ref(0)
   const wifi = ref(0)
+  const rent = ref(0) // ✅ New ref for rent rate
   const gcashNumber = ref('')
   const loading = ref(false)
   const errorMessage = ref('')
   const invoiceId = ref(null)
 
   const total = computed(() => {
-    return electricity.value + water.value + wifi.value
+    return electricity.value + water.value + wifi.value + rent.value
   })
 
-  const settingsId = ref('') // Store the actual UUID
+  const settingsId = ref('')
 
   const fetchSettings = async () => {
     loading.value = true
@@ -24,15 +25,16 @@ export const useUtilityStore = defineStore('utility', () => {
     try {
       const { data, error } = await supabase
         .from('settings')
-        .select('id, electricity_rate, water_rate, wifi_rate, gcash_number') // ✅ Fetch the UUID
+        .select('id, electricity_rate, water_rate, wifi_rate, rent_rate, gcash_number') // ✅ Include rent_rate
         .single()
 
       if (error) throw error
 
-      settingsId.value = data.id // ✅ Store the correct UUID
+      settingsId.value = data.id
       electricity.value = Number(data.electricity_rate) || 0
       water.value = Number(data.water_rate) || 0
       wifi.value = Number(data.wifi_rate) || 0
+      rent.value = Number(data.rent_rate) || 0 // ✅ Assign rent
       gcashNumber.value = data.gcash_number || ''
       console.log('✅ Settings fetched:', data)
     } catch (error) {
@@ -48,22 +50,24 @@ export const useUtilityStore = defineStore('utility', () => {
       loading.value = true
 
       console.log('Saving settings with the following values:', {
-        electricity_rate: electricity.value || 0,
-        water_rate: water.value || 0,
-        wifi_rate: wifi.value || 0,
-        gcash_number: gcashNumber.value, // Log the value before saving
+        electricity_rate: electricity.value,
+        water_rate: water.value,
+        wifi_rate: wifi.value,
+        rent_rate: rent.value, // ✅ Include rent
+        gcash_number: gcashNumber.value,
       })
 
       const { error } = await supabase
         .from('settings')
         .update({
-          electricity_rate: electricity.value || 0,
-          water_rate: water.value || 0,
-          wifi_rate: wifi.value || 0,
-          gcash_number: gcashNumber.value || null, // Ensure it is correctly formatted
+          electricity_rate: electricity.value,
+          water_rate: water.value,
+          wifi_rate: wifi.value,
+          rent_rate: rent.value, // ✅ Save rent to DB
+          gcash_number: gcashNumber.value || null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', settingsId.value) // Make sure you've set this correctly
+        .eq('id', settingsId.value)
 
       if (error) throw error
 
@@ -142,6 +146,7 @@ export const useUtilityStore = defineStore('utility', () => {
     electricity.value = 1200
     water.value = 800
     wifi.value = 1000
+    rent.value = 2500 // ✅ Optional: Set default rent value
     saveSettings()
   }
 
@@ -153,37 +158,30 @@ export const useUtilityStore = defineStore('utility', () => {
       } = await supabase.auth.getUser()
       if (error || !user) throw new Error('No user is currently logged in.')
 
-      // Fetch user's invoice_id and role
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('invoice_id, role') // Fetch role as well
+        .select('invoice_id, role')
         .eq('user_id', user.id)
         .single()
 
       if (userError) throw userError
 
-      // 🛑 Prevent admins from getting an invoice
       if (userData?.role === 'admin') {
         console.log('🛑 Admin detected. No invoice assigned.')
         return
       }
 
-      // If user has no invoice, create a new one with due_date 1 month ahead
       if (!userData?.invoice_id) {
-        console.warn('⚠️ No invoice found. Creating a new one...')
-
-        // Calculate due date (1 month from today)
         const today = new Date()
         const nextMonth = new Date(today.setMonth(today.getMonth() + 1)).toISOString().slice(0, 10)
 
-        // Insert a new invoice
         const { data: newInvoice, error: createError } = await supabase
           .from('invoices')
           .insert([
             {
-              total_amount: 0, // No payment yet
-              outstanding_balance: 0, // No overdue balance
-              due_date: nextMonth, // Set due date to 1 month ahead
+              total_amount: 0,
+              outstanding_balance: 0,
+              due_date: nextMonth,
               status: 'pending',
             },
           ])
@@ -192,7 +190,6 @@ export const useUtilityStore = defineStore('utility', () => {
 
         if (createError) throw createError
 
-        // Update user with the new invoice_id
         const { error: updateError } = await supabase
           .from('users')
           .update({ invoice_id: newInvoice.invoice_id })
@@ -211,9 +208,8 @@ export const useUtilityStore = defineStore('utility', () => {
     }
   }
 
-  // Watch for changes to update invoice automatically
   watch(
-    [electricity, water, wifi],
+    [electricity, water, wifi, rent], // ✅ Watch rent too
     debounce(() => {
       if (invoiceId.value) {
         console.log('🔄 Updating invoice...')
@@ -228,6 +224,7 @@ export const useUtilityStore = defineStore('utility', () => {
     electricity,
     water,
     wifi,
+    rent, // ✅ Expose rent
     gcashNumber,
     total,
     loading,

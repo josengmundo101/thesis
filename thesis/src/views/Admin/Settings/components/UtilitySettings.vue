@@ -47,6 +47,7 @@ const handleReset = () => {
         hint="Enter GCash Number (11 digits)"
         persistent-hint
       />
+      <v-text-field label="Rent (₱)" v-model="store.rent" type="number" outlined dense />
       <v-text-field
         label="Electricity (₱)"
         v-model="store.electricity"

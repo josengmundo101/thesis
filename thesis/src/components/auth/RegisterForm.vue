@@ -1,11 +1,10 @@
 <script setup>
 import { ref } from 'vue'
-import { signUp } from '@/api/auth.js' // Import the Supabase sign-up function
-import { useRouter } from 'vue-router' // For redirection
-import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators' // Import custom validators
+import { signUp } from '@/api/auth.js'
+import { useRouter } from 'vue-router'
+import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators'
 
-const showPassword = ref(false) // State for toggling password visibility
-// Initialize router
+const showPassword = ref(false)
 const router = useRouter()
 
 // Form data
@@ -26,18 +25,17 @@ const successMessage = ref('')
 
 // Handle Registration
 const handleRegister = async () => {
-  // Reset messages
   errorMessage.value = ''
   successMessage.value = ''
 
-  // Trim spaces
+  // Trim input values
   Object.keys(userData.value).forEach((key) => {
     if (typeof userData.value[key] === 'string') {
       userData.value[key] = userData.value[key].trim()
     }
   })
 
-  // 🔍 Form Validations
+  // Validations
   if (!userData.value.firstname || !userData.value.lastname) {
     errorMessage.value = 'First name and Last name are required.'
     return
@@ -54,14 +52,28 @@ const handleRegister = async () => {
     return
   }
 
+  if (userData.value.password !== userData.value.confirmPassword) {
+    errorMessage.value = 'Passwords do not match.'
+    return
+  }
+
   try {
     loading.value = true
-    const { formStatus, formSuccessMessage, formErrorMessage } = await signUp(userData.value)
+    const { formStatus, formSuccessMessage, formErrorMessage, user } = await signUp(userData.value)
 
     if (formStatus === 200) {
       successMessage.value = formSuccessMessage
-      // Redirect to Login or Dashboard
-      setTimeout(() => router.replace('/login'), 2000)
+
+      // Check if user is admin (first registered)
+      const isAdmin = formSuccessMessage.toLowerCase().includes('admin')
+
+      setTimeout(() => {
+        if (isAdmin) {
+          router.replace('/admin/dashboard')
+        } else {
+          router.replace('/login') // Tenant waits for approval
+        }
+      }, 2000)
     } else {
       errorMessage.value = formErrorMessage
     }

@@ -2,8 +2,8 @@
 import { ref } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useRouter } from 'vue-router'
-import { signIn } from '@/api/auth' // Import the Supabase login function
-import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators' // Import validators
+import { signIn } from '@/api/auth'
+import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators'
 
 const router = useRouter()
 
@@ -12,7 +12,7 @@ const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
-const showPassword = ref(false) // New state for toggling password visibility
+const showPassword = ref(false)
 
 // Handle Tenant Login
 const handleLogin = async () => {
@@ -37,7 +37,7 @@ const handleLogin = async () => {
     const { user } = await signIn(email.value, password.value)
 
     if (user) {
-      // Check if the user is a tenant
+      // Get user details from 'users' table
       const { data: userDetails, error } = await supabase
         .from('users')
         .select('*')
@@ -46,13 +46,21 @@ const handleLogin = async () => {
 
       if (error) throw error
 
-      if (userDetails.role === 'tenant') {
-        // Redirect tenant to tenant dashboard
-        router.replace('/tenant/TenantDashboard')
-      } else {
-        errorMessage.value = 'You are not authorized to access this page.'
-        await supabase.auth.signOut() // Log out unauthorized users
+      // Check role and approval status
+      if (userDetails.role !== 'tenant') {
+        errorMessage.value = 'Only tenant accounts can log in here.'
+        await supabase.auth.signOut()
+        return
       }
+
+      if (userDetails.status !== 'approved') {
+        errorMessage.value = 'Your account is not yet approved.'
+        await supabase.auth.signOut()
+        return
+      }
+
+      // ✅ Approved tenant
+      router.replace('/tenant/TenantDashboard')
     }
   } catch (error) {
     errorMessage.value = error.message || 'Invalid credentials.'

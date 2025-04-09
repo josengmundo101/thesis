@@ -17,6 +17,16 @@ onMounted(() => {
     <v-list density="compact">
       <v-list-item>
         <template v-slot:prepend>
+          <v-icon color="deep-orange">mdi-home-city</v-icon>
+        </template>
+        <v-list-item-title>Rent</v-list-item-title>
+        <v-list-item-subtitle class="font-weight-bold text-primary">
+          ₱{{ store.rent }}
+        </v-list-item-subtitle>
+      </v-list-item>
+
+      <v-list-item>
+        <template v-slot:prepend>
           <v-icon color="amber">mdi-lightning-bolt</v-icon>
         </template>
         <v-list-item-title>Electricity</v-list-item-title>
