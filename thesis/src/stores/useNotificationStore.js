@@ -51,3 +51,28 @@ export const useNotificationStore = defineStore('notification', () => {
 
   return { notifications, addNotification, init }
 })
+
+// Clear all notifications
+const clearNotifications = async () => {
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+
+    // Update all unread notifications for this user to 'read'
+    const { error } = await supabase
+      .from('notifications')
+      .update({ status: 'read' })
+      .eq('tenant_identifier', user.id)
+      .eq('status', 'unread')
+
+    if (error) throw error
+
+    // Clear the local notifications array
+    notifications.value = []
+  } catch (error) {
+    console.error('Error clearing notifications:', error.message)
+  }
+}
+
+return { notifications, fetchNotifications, clearNotifications }
+})

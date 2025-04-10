@@ -1,5 +1,7 @@
 <script setup>
 import { ref, defineProps, defineEmits } from 'vue'
+import { supabase } from '@/utils/supabase' // Ensure this import is present
+import { useToast } from 'vue-toastification' // Add this import
 
 const props = defineProps({
   payments: {
@@ -9,6 +11,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['status-change'])
+
+// Initialize toast
+const toast = useToast()
 
 // Dialog Handling
 const dialog = ref(false)
@@ -20,8 +25,9 @@ const openDialog = (payment, action) => {
   dialog.value = true
 }
 
-// Emit Status Change Event
-const changeStatus = () => {
+// Emit Status Change Event with Notification
+const changeStatus = async () => {
+  // Make it async to handle Supabase calls
   if (selectedPayment.value) {
     // Update the status in the local payments array immediately
     const paymentIndex = props.payments.findIndex((p) => p.id === selectedPayment.value.id)
@@ -29,13 +35,35 @@ const changeStatus = () => {
       props.payments[paymentIndex].status = selectedPayment.value.action // Update status locally
     }
 
-    // Emit the event to update the database
-    emit('status-change', {
-      payment_id: selectedPayment.value.id,
-      invoice_id: selectedPayment.value.invoice_id,
-      amount: selectedPayment.value.amount,
-      action: selectedPayment.value.action,
-    })
+    try {
+      // Insert notification into Supabase
+      const { error: notificationError } = await supabase.from('notifications').insert({
+        message: `Your payment of $${selectedPayment.value.amount} has been ${selectedPayment.value.action}.`,
+        type: selectedPayment.value.action === 'approved' ? 'success' : 'error',
+        tenant_identifier: selectedPayment.value.user_id || selectedPayment.value.tenant_id, // Adjust based on your schema
+        status: 'unread',
+        timestamp: new Date().toISOString(),
+      })
+
+      if (notificationError) throw notificationError
+
+      // Emit the event to update the database
+      emit('status-change', {
+        payment_id: selectedPayment.value.id,
+        invoice_id: selectedPayment.value.invoice_id,
+        amount: selectedPayment.value.amount,
+        action: selectedPayment.value.action,
+      })
+
+      // Show success toast
+      toast.success(
+        `Payment of $${selectedPayment.value.amount} ${selectedPayment.value.action} successfully!`,
+      )
+    } catch (error) {
+      console.error('Error sending notification:', error)
+      toast.error(`Failed to ${selectedPayment.value.action} payment. Please try again.`)
+    }
+
     dialog.value = false
   }
 }

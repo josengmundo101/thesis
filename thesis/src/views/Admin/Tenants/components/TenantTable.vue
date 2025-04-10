@@ -23,7 +23,7 @@ const props = defineProps({
 // Emits for actions
 const emit = defineEmits(['pageChange', 'viewDetails', 'assignRoom', 'view-ledger'])
 
-// Local page state (avoid direct prop mutation)
+// Local page state
 const pageNumber = ref(props.page)
 
 // Sync local page state with prop changes
@@ -37,7 +37,7 @@ watch(
 // Compute paginated tenants
 const paginatedTenants = computed(() => {
   if (!props.tenants || props.tenants.length === 0) {
-    console.warn('⚠️ No tenant data found!') // Debugging check
+    console.warn('⚠️ No tenant data found!')
     return []
   }
   const startIndex = (pageNumber.value - 1) * props.itemsPerPage
@@ -57,7 +57,7 @@ const changePage = (newPage) => {
 
 // Helper to get room details
 const getRoomDetails = (tenant) => {
-  const bedAssignment = tenant?.bed_assignment?.[0] || null // Access first assignment
+  const bedAssignment = tenant?.bed_assignment?.[0] || null
   if (!bedAssignment) return 'Not assigned'
 
   const roomNumber = bedAssignment?.rooms?.room_number || 'N/A'
@@ -97,17 +97,17 @@ const getRoomDetails = (tenant) => {
                   ? 'green'
                   : tenant.status === 'pending'
                     ? 'orange'
-                    : 'red'
+                    : tenant.status === 'paid'
+                      ? 'blue'
+                      : 'red'
               "
               small
             >
-              {{ tenant.status }}
+              {{ tenant.status || 'Unpaid' }}
             </v-chip>
           </td>
-
           <td>
-            <v-btn color="primary" @click="$emit('view-ledger', tenant)"> View Ledger </v-btn>
-
+            <v-btn color="primary" @click="$emit('view-ledger', tenant)">View Ledger</v-btn>
             <v-btn size="small" variant="text" color="primary" @click="emit('viewDetails', tenant)">
               <v-icon left>mdi-eye</v-icon> View
             </v-btn>
@@ -124,12 +124,10 @@ const getRoomDetails = (tenant) => {
       </tbody>
     </v-table>
 
-    <!-- Show a message if no tenants exist -->
     <v-alert v-else type="info" variant="outlined" class="my-4">
       No tenants found. Try adding some data.
     </v-alert>
 
-    <!-- Pagination -->
     <v-container v-if="totalPages > 1" class="d-flex justify-space-between align-center">
       <p class="text-body-2">
         Showing <strong>{{ (pageNumber - 1) * itemsPerPage + 1 }}</strong> to

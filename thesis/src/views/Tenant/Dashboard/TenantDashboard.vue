@@ -64,6 +64,30 @@ const fetchNotifications = async () => {
     console.error('TenantDashboard - Error fetching notifications:', error)
   }
 }
+const clearNotifications = async () => {
+  try {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) throw new Error('No user is currently logged in.')
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ status: 'read' })
+      .eq('tenant_identifier', user.id)
+      .eq('status', 'unread')
+
+    if (error) throw error
+
+    // Clear the local notifications array
+    notifications.value = []
+    console.log('TenantDashboard - Cleared notifications for user:', user.id)
+  } catch (error) {
+    console.error('TenantDashboard - Error clearing notifications:', error.message)
+  }
+}
 
 const tenantNotifications = computed(() => {
   if (!userId.value) return []
@@ -108,7 +132,10 @@ onMounted(() => {
 
     <v-row>
       <v-col cols="12">
-        <NotificationCard :notifications="tenantNotifications" />
+        <NotificationCard
+          :notifications="tenantNotifications"
+          @clear-notifications="clearNotifications"
+        />
       </v-col>
     </v-row>
 

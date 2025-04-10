@@ -145,7 +145,7 @@ const confirmPasswordValidator = (value) => {
     <v-col cols="12">
       <v-text-field
         v-model="userData.contact_number"
-        label="Contact Number"
+        label="Gcash Number"
         outlined
         dense
         color="blue"

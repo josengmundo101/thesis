@@ -1,5 +1,4 @@
 <script setup>
-import { useNotificationStore } from '@/stores/useNotificationStore'
 import { watch } from 'vue'
 
 const { notifications } = defineProps({
@@ -9,7 +8,7 @@ const { notifications } = defineProps({
   },
 })
 
-const notificationStore = useNotificationStore()
+const emit = defineEmits(['clear-notifications'])
 
 console.log(
   'NotificationCard - Received notifications on setup:',
@@ -26,6 +25,10 @@ watch(
   },
   { deep: true },
 )
+
+const handleClearNotifications = () => {
+  emit('clear-notifications')
+}
 </script>
 
 <template>
@@ -37,7 +40,7 @@ watch(
         variant="text"
         color="error"
         size="small"
-        @click.stop="notificationStore.clearNotifications()"
+        @click.stop="handleClearNotifications"
         :disabled="notifications.length === 0"
       >
         Clear All
@@ -68,7 +71,7 @@ watch(
             {{ item.message }}
           </v-list-item-title>
           <v-list-item-subtitle class="notification-time">
-            {{ formatDate(item.timestamp) }}
+            {{ formatDate(item.created_at) }}
           </v-list-item-subtitle>
         </v-list-item>
       </template>
@@ -79,7 +82,6 @@ watch(
 </template>
 
 <script>
-// Separate script block for non-reactive functions
 export default {
   methods: {
     getIconColor(type) {
@@ -89,6 +91,9 @@ export default {
           success: 'success',
           reminder: 'warning',
           info: 'info',
+          payment_approval: 'warning',
+          payment_approved: 'success',
+          payment_rejected: 'error',
         }[type] || 'warning'
       )
     },
@@ -99,6 +104,9 @@ export default {
           success: 'mdi-check-circle',
           reminder: 'mdi-bell-alert',
           info: 'mdi-information',
+          payment_approval: 'mdi-clock-outline',
+          payment_approved: 'mdi-check-circle',
+          payment_rejected: 'mdi-close-circle',
         }[type] || 'mdi-bell'
       )
     },
@@ -152,6 +160,21 @@ export default {
 .notification-reminder {
   border-left-color: rgb(var(--v-theme-warning));
   background-color: rgba(var(--v-theme-warning), 0.05);
+}
+
+.notification-payment_approval {
+  border-left-color: rgb(var(--v-theme-warning));
+  background-color: rgba(var(--v-theme-warning), 0.05);
+}
+
+.notification-payment_approved {
+  border-left-color: rgb(var(--v-theme-success));
+  background-color: rgba(var(--v-theme-success), 0.05);
+}
+
+.notification-payment_rejected {
+  border-left-color: rgb(var(--v-theme-error));
+  background-color: rgba(var(--v-theme-error), 0.05);
 }
 
 .notification-message {

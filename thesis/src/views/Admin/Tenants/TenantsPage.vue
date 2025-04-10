@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useToast } from 'vue-toastification'
 import SearchBar from './components/SearchBar.vue'
@@ -21,12 +21,9 @@ const assignModalOpen = ref(false)
 const ITEMS_PER_PAGE = 5
 const showLedger = ref(false)
 
-// 🔍 Fetch tenants from Supabase where role = 'tenant'
-
 const fetchTenants = async () => {
   loading.value = true
   try {
-    // Fetch tenants with bed_assignment, rooms, and invoices
     const { data, error } = await supabase
       .from('users')
       .select(
@@ -34,6 +31,7 @@ const fetchTenants = async () => {
         *,
         bed_assignment (
           bed_side,
+          room_id,
           rooms (
             room_number
           )
@@ -47,26 +45,44 @@ const fetchTenants = async () => {
 
     if (error) throw error
 
-    // Map tenants with status
     tenants.value = data.map((tenant) => ({
       ...tenant,
-      status: tenant?.invoices?.status || 'Unpaid',
+      status: tenant?.invoices?.[0]?.status || 'Unpaid', // Use first invoice status
+      bed_assignment: tenant.bed_assignment.length > 0 ? tenant.bed_assignment : null,
     }))
     console.log('Fetched Tenants with Status:', tenants.value)
   } catch (error) {
     console.error('Error fetching tenants:', error.message)
     errorMessage.value = 'Failed to load tenants. Please try again later.'
+    tenants.value = []
   } finally {
     loading.value = false
   }
 }
 
-// 🚀 Fetch tenants on component mount
+const subscribeToTenantChanges = () => {
+  supabase
+    .channel('public:bed_assignment')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'bed_assignment' },
+      (payload) => {
+        console.log('Bed assignment change:', payload)
+        fetchTenants() // Refetch tenants on any bed assignment change
+      },
+    )
+    .subscribe()
+}
+
 onMounted(() => {
   fetchTenants()
+  subscribeToTenantChanges()
 })
 
-// 🔍 Computed property for filtered tenants
+onUnmounted(() => {
+  supabase.removeAllChannels()
+})
+
 const filteredTenants = computed(() => {
   if (!searchQuery.value) return tenants.value
   return tenants.value.filter((tenant) => {
@@ -74,36 +90,41 @@ const filteredTenants = computed(() => {
     return (
       fullName.includes(searchQuery.value.toLowerCase()) ||
       tenant.email.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      (tenant?.bed_assignment?.rooms?.room_number &&
-        tenant.bed_assignment.rooms.room_number
+      (tenant?.bed_assignment?.[0]?.rooms?.room_number &&
+        tenant.bed_assignment[0].rooms.room_number
           .toLowerCase()
           .includes(searchQuery.value.toLowerCase()))
     )
   })
 })
 
-// 🔑 Handle viewing tenant details
 const handleViewDetails = (tenant) => {
   selectedTenant.value = tenant
   console.log('📜 Selected Tenant for Details:', selectedTenant.value)
   detailsModalOpen.value = true
 }
 
-// 🏠 Handle room assignment
 const handleAssignRoom = (tenant) => {
   selectedTenant.value = tenant
   console.log('🏡 Assign Room to Tenant:', tenant)
   assignModalOpen.value = true
 }
 
-// 🔄 Update tenant data after room assignment
 const handleUpdateTenant = (updatedTenant) => {
   const index = tenants.value.findIndex((t) => t.user_id === updatedTenant.user_id)
   if (index !== -1) {
-    tenants.value[index] = { ...tenants.value[index], ...updatedTenant }
+    tenants.value[index] = {
+      ...tenants.value[index],
+      bed_assignment: [
+        {
+          bed_side: updatedTenant.bed_side,
+          room_id: updatedTenant.room_id,
+          rooms: { room_number: updatedTenant.room_number }, // Ensure room_number is included
+        },
+      ],
+    }
     toast.success(`✅ Room assigned to ${updatedTenant.firstname} ${updatedTenant.lastname}`)
   } else {
-    // Fallback: Re-fetch if tenant is not found
     toast.info('🔄 Refetching tenant list for latest data...')
     fetchTenants()
   }
@@ -117,7 +138,6 @@ const openLedger = (tenant) => {
 
 <template>
   <v-container class="py-8">
-    <!-- 🔷 Page Header -->
     <div class="dashboard-overview mt-6 mb-8">
       <h1 class="text-h4 font-weight-bold tracking-tight fade-in delay-50">Tenant Management</h1>
       <p class="text-body-2 text-grey-darken-1 max-width fade-in delay-100">
@@ -125,20 +145,18 @@ const openLedger = (tenant) => {
       </p>
     </div>
 
-    <!-- 🔍 Search Bar -->
     <v-row class="mb-4">
       <v-col cols="12" sm="6">
         <SearchBar v-model="searchQuery" placeholder="Search tenants by name, email, or room..." />
       </v-col>
     </v-row>
 
-    <!-- 📊 Tenant Table -->
     <v-row>
       <v-col>
         <TenantTable
           :tenants="filteredTenants"
           :items-per-page="ITEMS_PER_PAGE"
-          :current-page="currentPage"
+          :page="currentPage"
           @page-change="currentPage = $event"
           @view-details="handleViewDetails"
           @assign-room="handleAssignRoom"
@@ -147,14 +165,12 @@ const openLedger = (tenant) => {
       </v-col>
     </v-row>
 
-    <!-- 🕵️ Pending Tenants Waiting for Approval -->
     <v-row class="mb-6">
       <v-col cols="12">
         <PendingTenantApproval />
       </v-col>
     </v-row>
 
-    <!-- 🏷️ Display loading or error states -->
     <v-progress-circular
       v-if="loading"
       indeterminate
@@ -167,21 +183,18 @@ const openLedger = (tenant) => {
       {{ errorMessage }}
     </v-alert>
 
-    <!-- 📜 Tenant Ledger Modal -->
     <TenantLedger
       :isOpen="showLedger"
       @update:isOpen="showLedger = $event"
       :tenant="selectedTenant"
     />
 
-    <!-- 🔍 View Details Modal -->
     <ViewDetails
       :model-value="detailsModalOpen"
       @update:model-value="detailsModalOpen = $event"
       :tenant="selectedTenant"
     />
 
-    <!-- 🏠 Assign Room Modal -->
     <AssignRoom
       :model-value="assignModalOpen"
       @update:model-value="assignModalOpen = $event"
@@ -199,7 +212,6 @@ const openLedger = (tenant) => {
   max-width: 600px;
 }
 
-/* Fade-in Animations */
 .fade-in {
   opacity: 0;
   transform: translateY(10px);
