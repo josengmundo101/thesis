@@ -28,7 +28,9 @@ const changeStatus = async () => {
     const paymentIndex = props.payments.findIndex((p) => p.id === selectedPayment.value.id)
 
     if (paymentIndex !== -1) {
-      props.payments[paymentIndex].status = selectedPayment.value.action
+      const updatedPayments = [...props.payments]
+      updatedPayments[paymentIndex].status = selectedPayment.value.action
+      emit('status-change', updatedPayments)
     }
 
     try {

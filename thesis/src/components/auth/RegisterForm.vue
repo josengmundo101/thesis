@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import { signUp } from '@/api/auth.js'
 import { useRouter } from 'vue-router'
 import { requiredValidator, emailValidator, passwordValidator } from '@/utils/validators'
-import { toast } from 'vue3-toastify'
 
 const showPassword = ref(false)
 const router = useRouter()
@@ -26,12 +25,14 @@ const handleRegister = async () => {
   errorMessage.value = ''
   successMessage.value = ''
 
+  // Trim input fields
   Object.keys(userData.value).forEach((key) => {
     if (typeof userData.value[key] === 'string') {
       userData.value[key] = userData.value[key].trim()
     }
   })
 
+  // Validation checks
   if (!userData.value.firstname || !userData.value.lastname) {
     errorMessage.value = 'First name and Last name are required.'
     return
@@ -61,9 +62,10 @@ const handleRegister = async () => {
 
     if (formStatus === 200) {
       successMessage.value = formSuccessMessage
-      toast.success(formSuccessMessage)
 
       setTimeout(() => {
+        // Clear successMessage before redirecting
+        successMessage.value = ''
         if (role === 'admin') {
           router.replace('/admin/dashboard')
         } else {
@@ -72,11 +74,9 @@ const handleRegister = async () => {
       }, 2000)
     } else {
       errorMessage.value = formErrorMessage
-      toast.error(formErrorMessage)
     }
   } catch (error) {
     errorMessage.value = error.message || 'Something went wrong.'
-    toast.error(error.message || 'Something went wrong.')
   } finally {
     loading.value = false
   }
@@ -90,116 +90,148 @@ const confirmPasswordValidator = (value) => {
 </script>
 
 <template>
-  <div class="mb-3 mt-5">
-    <p class="text-center text-h4 mb-2">Create An Account</p>
-    <p class="text-center text-caption">
-      Already have an account?
-      <RouterLink class="text-primary" to="/login">Log in</RouterLink>
-    </p>
+  <div>
+    <!-- Show the form if no success message -->
+    <div v-if="!successMessage">
+      <div class="mb-3 mt-5">
+        <p class="text-center text-h4 mb-2">Create An Account</p>
+        <p class="text-center text-caption">
+          Already have an account?
+          <RouterLink class="text-primary" to="/login">Log in</RouterLink>
+        </p>
+      </div>
+
+      <v-row>
+        <v-col cols="12" sm="6">
+          <v-text-field
+            v-model="userData.firstname"
+            label="First Name"
+            outlined
+            dense
+            color="blue"
+            :rules="[requiredValidator]"
+          />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-text-field
+            v-model="userData.lastname"
+            label="Last Name"
+            outlined
+            dense
+            color="blue"
+            :rules="[requiredValidator]"
+          />
+        </v-col>
+
+        <v-col cols="12">
+          <v-text-field
+            v-model="userData.email"
+            label="Email Address"
+            outlined
+            dense
+            color="blue"
+            :rules="[requiredValidator, emailValidator]"
+          />
+        </v-col>
+
+        <v-col cols="12">
+          <v-text-field
+            v-model="userData.address"
+            label="Address"
+            outlined
+            dense
+            color="blue"
+            :rules="[requiredValidator]"
+          />
+        </v-col>
+
+        <v-col cols="12">
+          <v-text-field
+            v-model="userData.contact_number"
+            label="Gcash Number"
+            outlined
+            dense
+            color="blue"
+            :rules="[requiredValidator]"
+          />
+        </v-col>
+
+        <v-col cols="12" sm="6">
+          <v-text-field
+            v-model="userData.password"
+            label="Password"
+            outlined
+            dense
+            color="blue"
+            :type="showPassword ? 'text' : 'password'"
+            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            @click:append-inner="showPassword = !showPassword"
+            :rules="[requiredValidator, passwordValidator]"
+          />
+        </v-col>
+
+        <v-col cols="12" sm="6">
+          <v-text-field
+            v-model="userData.confirmPassword"
+            label="Confirm Password"
+            outlined
+            dense
+            color="blue"
+            :type="showPassword ? 'text' : 'password'"
+            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            @click:append-inner="showPassword = !showPassword"
+            :rules="[requiredValidator, confirmPasswordValidator]"
+          />
+        </v-col>
+
+        <v-col cols="12">
+          <v-alert v-if="errorMessage" type="error" dense class="mb-2">
+            {{ errorMessage }}
+          </v-alert>
+
+          <v-btn
+            :loading="loading"
+            @click="handleRegister"
+            class="my-auto mx-auto"
+            color="#578e7e"
+            dark
+            block
+            tile
+          >
+            Sign Up
+          </v-btn>
+        </v-col>
+      </v-row>
+    </div>
+
+    <!-- Show full-screen success message with large check-circle icon -->
+    <div v-if="successMessage" class="success-container">
+      <v-icon class="success-icon" color="green">mdi-check-circle</v-icon>
+      <p class="success-message">{{ successMessage }}</p>
+    </div>
   </div>
-
-  <v-row>
-    <v-col cols="12" sm="6">
-      <v-text-field
-        v-model="userData.firstname"
-        label="First Name"
-        outlined
-        dense
-        color="blue"
-        :rules="[requiredValidator]"
-      />
-    </v-col>
-    <v-col cols="12" sm="6">
-      <v-text-field
-        v-model="userData.lastname"
-        label="Last Name"
-        outlined
-        dense
-        color="blue"
-        :rules="[requiredValidator]"
-      />
-    </v-col>
-
-    <v-col cols="12">
-      <v-text-field
-        v-model="userData.email"
-        label="Email Address"
-        outlined
-        dense
-        color="blue"
-        :rules="[requiredValidator, emailValidator]"
-      />
-    </v-col>
-
-    <v-col cols="12">
-      <v-text-field
-        v-model="userData.address"
-        label="Address"
-        outlined
-        dense
-        color="blue"
-        :rules="[requiredValidator]"
-      />
-    </v-col>
-
-    <v-col cols="12">
-      <v-text-field
-        v-model="userData.contact_number"
-        label="Gcash Number"
-        outlined
-        dense
-        color="blue"
-        :rules="[requiredValidator]"
-      />
-    </v-col>
-
-    <v-col cols="12" sm="6">
-      <v-text-field
-        v-model="userData.password"
-        label="Password"
-        outlined
-        dense
-        color="blue"
-        :type="showPassword ? 'text' : 'password'"
-        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append-inner="showPassword = !showPassword"
-        :rules="[requiredValidator, passwordValidator]"
-      />
-    </v-col>
-
-    <v-col cols="12" sm="6">
-      <v-text-field
-        v-model="userData.confirmPassword"
-        label="Confirm Password"
-        outlined
-        dense
-        color="blue"
-        :type="showPassword ? 'text' : 'password'"
-        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append-inner="showPassword = !showPassword"
-        :rules="[requiredValidator, confirmPasswordValidator]"
-      />
-    </v-col>
-
-    <v-col cols="12">
-      <v-alert v-if="errorMessage" type="error" dense class="mb-2">
-        {{ errorMessage }}
-      </v-alert>
-      <v-alert v-if="successMessage" type="success" dense class="mb-2">
-        {{ successMessage }}
-      </v-alert>
-
-      <v-btn
-        :loading="loading"
-        @click="handleRegister"
-        class="my-auto mx-auto"
-        color="#578e7e"
-        dark
-        block
-        tile
-      >
-        Sign Up
-      </v-btn>
-    </v-col>
-  </v-row>
 </template>
+
+<style scoped>
+.success-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+  background-color: #fff;
+  padding: 2rem;
+}
+
+.success-icon {
+  font-size: 8rem;
+  margin-bottom: 1rem;
+}
+
+.success-message {
+  font-size: 1.2rem;
+  color: #333;
+  max-width: 500px;
+}
+</style>

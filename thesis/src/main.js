@@ -36,7 +36,7 @@ const vuetify = createVuetify({
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 app.use(Vue3Toastify, {
-  autoClose: 3000, // Toast auto-closes after 3 seconds
+  autoClose: 5000, // Toast auto-closes after 3 seconds
   position: 'top-right', // Position of the toast
   theme: 'colored', // Optional: 'light', 'dark', or 'colored'
 })
