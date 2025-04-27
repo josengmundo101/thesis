@@ -49,9 +49,17 @@ const fetchTenantDetails = async () => {
 
 const fetchNotifications = async () => {
   try {
+    // Get the current user's user_id
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+    if (authError || !user) throw new Error('User not authenticated')
+
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
+      .eq('user_id', user.id) // Filter by the logged-in tenant's user_id
       .order('timestamp', { ascending: false })
       .limit(50)
     if (error) throw error
@@ -64,6 +72,35 @@ const fetchNotifications = async () => {
     console.error('TenantDashboard - Error fetching notifications:', error)
   }
 }
+
+// Real-time subscription for notifications
+onMounted(() => {
+  const subscription = supabase
+    .channel('notifications-channel')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+      },
+      (payload) => {
+        const newNotification = payload.new
+        // Only add the notification if it belongs to the logged-in tenant
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (newNotification.user_id === user.id) {
+            notifications.value = [newNotification, ...notifications.value].slice(0, 50)
+          }
+        })
+      },
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(subscription)
+  }
+})
+
 const clearNotifications = async () => {
   try {
     const {

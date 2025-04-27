@@ -88,8 +88,6 @@ export const signUp = async (userData) => {
 
 // 🔹 Sign In Function with Detailed Error Messages
 export const signIn = async (email, password) => {
-  let action = { ...formActionDefault }
-
   try {
     if (!email || !password) throw new Error('Email and Password are required.')
 
@@ -118,7 +116,7 @@ export const signIn = async (email, password) => {
 
     if (userError) throw userError
 
-    console.log('✅ Fetched Profile:', profile) // Add this log
+    console.log('✅ Fetched Profile:', profile)
 
     const role = profile.role
     const status = profile.status
@@ -126,11 +124,8 @@ export const signIn = async (email, password) => {
     if (status !== 'approved') {
       await supabase.auth.signOut()
       toast.warning('Your account is not approved yet. Please wait for admin confirmation.')
-      action.formStatus = 403
-      action.formErrorMessage =
-        'Your account is not approved yet. Please wait for admin confirmation.'
-      router.push('/login') // Explicitly redirect to /login
-      return { ...action }
+      router.push('/login')
+      throw new Error('Your account is not approved yet. Please wait for admin confirmation.')
     }
 
     localStorage.setItem('user_role', role)
@@ -142,15 +137,10 @@ export const signIn = async (email, password) => {
     }
 
     console.log('✅ Login Success:', user, 'Role:', role, 'Status:', status)
-    action.formStatus = 200
-    action.formSuccessMessage = `Welcome back!`
-    return { ...action, user }
+    return { user }
   } catch (error) {
     console.error('🛑 Login Failed:', error.message)
-    toast.error(error.message || 'Login failed.')
-    action.formStatus = 400
-    action.formErrorMessage = error.message || 'Login failed. Please try again.'
-    return { ...action }
+    throw error // Re-throw the error so TenantLoginForm.vue can catch it
   }
 }
 

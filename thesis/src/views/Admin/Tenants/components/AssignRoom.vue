@@ -152,7 +152,7 @@ const handleAssign = async () => {
     const { error: notificationError } = await supabase.from('notifications').insert({
       message: `You have been assigned to Room ${selectedRoom.value.room_number} (${bedSide.value.toUpperCase()}).`,
       type: 'info',
-      tenant_identifier: props.tenant.user_id,
+      user_id: props.tenant.user_id,
       status: 'unread',
       timestamp: new Date().toISOString(),
     })

@@ -34,14 +34,15 @@ const handleLogin = async () => {
 
   try {
     loading.value = true
-    const { user } = await signIn(email.value, password.value)
+    const result = await signIn(email.value, password.value)
 
-    if (user) {
+    // Check if the result contains a user (successful login)
+    if (result && result.user) {
       // Get user details from 'users' table
       const { data: userDetails, error } = await supabase
         .from('users')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', result.user.id)
         .single()
 
       if (error) throw error
@@ -96,11 +97,21 @@ const handleLogin = async () => {
     :error-messages="!passwordValidator(password) && password ? 'Password is required.' : ''"
   />
 
-  <v-alert v-if="errorMessage" type="error" dense class="mb-2">
-    {{ errorMessage }}
-  </v-alert>
+  <!-- Custom Error Message -->
+  <div v-if="errorMessage" class="custom-error-message mt-3 mb-4">
+    <span>{{ errorMessage }}</span>
+  </div>
 
-  <v-btn :loading="loading" @click="handleLogin" class="mb-5 mt-12" color="#578e7e" dark block tile>
+  <v-btn
+    :loading="loading"
+    :disabled="loading || !email || !password"
+    @click="handleLogin"
+    class="mb-5 mt-3"
+    color="#578e7e"
+    dark
+    block
+    tile
+  >
     Log in
   </v-btn>
 
@@ -109,3 +120,38 @@ const handleLogin = async () => {
     <RouterLink class="text-primary" to="/register">Sign Up</RouterLink>
   </p>
 </template>
+
+<style scoped>
+.custom-error-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(229, 115, 115, 0.12); /* Slightly softer red background */
+  color: #d32f2f; /* Slightly darker red text for better contrast */
+  padding: 10px 14px; /* Slightly more padding for balance */
+  border-radius: 8px; /* Smoother corners */
+  font-size: 0.9rem; /* Slightly larger font for readability */
+  font-weight: 500; /* Medium weight for emphasis */
+  line-height: 1.5; /* Better line spacing */
+  border: 1px solid rgba(229, 115, 115, 0.25); /* Softer border */
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08); /* Slightly deeper shadow for depth */
+  max-width: 100%; /* Ensure it doesn’t overflow on smaller screens */
+  text-align: center;
+}
+
+/* Subtle animation for the error message */
+.custom-error-message {
+  animation: slideIn 0.4s ease-in-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>

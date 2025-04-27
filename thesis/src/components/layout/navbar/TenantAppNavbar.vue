@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { supabase } from '@/utils/supabase' // ✅ Import Supabase
-// Removed unused signOut import
+import { supabase } from '@/utils/supabase'
+import { useDisplay } from 'vuetify' // Import useDisplay composable
 
 // Navigation links
 const menuItems = [
@@ -12,15 +12,18 @@ const menuItems = [
 
 // Reactive States
 const profileMenu = ref(false)
+const mobileMenu = ref(false)
 const loading = ref(false)
-const tenantName = ref('Tenant') // ✅ Initialize state
+const tenantName = ref('Tenant')
 const route = useRoute()
 const router = useRouter()
 
-// 🔍 Function to fetch Tenant Details
+// Access Vuetify display breakpoints
+const { smAndDown } = useDisplay() // Destructure smAndDown from useDisplay
+
+// Function to fetch Tenant Details
 const fetchTenantDetails = async () => {
   try {
-    // 1. Get logged-in user
     const {
       data: { user },
       error: userError,
@@ -28,9 +31,8 @@ const fetchTenantDetails = async () => {
     if (userError) throw userError
     if (!user) throw new Error('No user is currently logged in.')
 
-    console.log('✅ User ID:', user.id) // Log User ID
+    console.log('✅ User ID:', user.id)
 
-    // 2. Fetch tenant details from the 'users' table
     const { data: tenantData, error: tenantError } = await supabase
       .from('users')
       .select('firstname, lastname')
@@ -38,11 +40,10 @@ const fetchTenantDetails = async () => {
       .single()
 
     if (tenantError) throw tenantError
-    console.log('✅ Tenant Data:', tenantData) // Log Tenant Data
+    console.log('✅ Tenant Data:', tenantData)
 
-    // ✅ Update reactive state
     if (tenantData) {
-      tenantName.value = `${tenantData.firstname} ${tenantData.lastname}` // ✅ Set the name
+      tenantName.value = `${tenantData.firstname} ${tenantData.lastname}`
       console.log('✅ Tenant Name:', tenantName.value)
     }
   } catch (error) {
@@ -50,30 +51,43 @@ const fetchTenantDetails = async () => {
   }
 }
 
-// 🚀 Call the function on component mount
+// Handle Logout
+const handleLogout = async () => {
+  await supabase.auth.signOut()
+  localStorage.clear()
+  router.push('/login')
+}
+
+// Call the function on component mount
 onMounted(() => {
   fetchTenantDetails()
 })
-
-// 🔑 Handle Logout
-const handleLogout = async () => {
-  await supabase.auth.signOut()
-  localStorage.clear() // Clear role and session
-  router.push('/login')
-}
 </script>
 
 <template>
   <!-- Navbar -->
-  <v-app-bar flat height="70" class="px-6 bg-white">
-    <v-container class="d-flex align-center justify-space-between">
+  <v-app-bar flat :height="smAndDown ? 60 : 70" class="px-6 bg-white">
+    <v-container class="d-flex align-center justify-space-between pa-0">
+      <!-- Hamburger Menu for Mobile -->
+      <v-btn
+        icon
+        class="d-md-none"
+        @click="mobileMenu = !mobileMenu"
+        :aria-label="mobileMenu ? 'Close menu' : 'Open menu'"
+      >
+        <v-icon size="28">{{ mobileMenu ? 'mdi-close' : 'mdi-menu' }}</v-icon>
+      </v-btn>
+
       <!-- Logo -->
       <RouterLink to="/tenant/TenantDashboard" class="logo">
         BOARDING HOUSE <sup>TENANT</sup>
       </RouterLink>
 
-      <!-- Navigation Links -->
-      <v-toolbar-items class="d-none d-md-flex">
+      <!-- Spacer for Desktop -->
+      <v-spacer class="d-none d-md-block"></v-spacer>
+
+      <!-- Navigation Links (Desktop) -->
+      <div class="center-links d-none d-md-flex">
         <v-btn
           v-for="item in menuItems"
           :key="item.title"
@@ -85,24 +99,25 @@ const handleLogout = async () => {
           <v-icon class="mr-2">{{ item.icon }}</v-icon>
           {{ item.title }}
         </v-btn>
-      </v-toolbar-items>
+      </div>
 
       <!-- User Profile Dropdown -->
       <v-menu v-model="profileMenu" offset-y>
         <template v-slot:activator="{ props }">
-          <v-btn v-bind="props" class="text-none" variant="text">
-            <v-avatar size="40" class="mr-2">
+          <v-btn v-bind="props" class="text-none profile-btn" variant="text">
+            <v-avatar :size="smAndDown ? 32 : 40" class="mr-2">
               <img src="https://randomuser.me/api/portraits/men/45.jpg" alt="User Avatar" />
             </v-avatar>
-            {{ tenantName }}
-            <!-- ✅ This should work now -->
-            <v-icon right>mdi-chevron-down</v-icon>
+            <span :class="smAndDown ? 'text-caption' : ''">
+              {{ tenantName }}
+            </span>
+            <v-icon right :size="smAndDown ? 20 : 24">mdi-chevron-down</v-icon>
           </v-btn>
         </template>
 
         <v-list>
           <v-list-item>
-            <v-btn :loading="loading" @click="handleLogout">
+            <v-btn block :loading="loading" @click="handleLogout">
               <v-icon class="mr-2">mdi-logout</v-icon> Logout
             </v-btn>
           </v-list-item>
@@ -110,6 +125,32 @@ const handleLogout = async () => {
       </v-menu>
     </v-container>
   </v-app-bar>
+
+  <!-- Mobile Menu (Drawer) -->
+  <v-navigation-drawer v-model="mobileMenu" temporary fixed width="250" class="mobile-menu">
+    <v-list dense>
+      <v-list-item class="pa-4">
+        <RouterLink to="/tenant/TenantDashboard" class="logo">
+          BOARDING HOUSE <sup>TENANT</sup>
+        </RouterLink>
+      </v-list-item>
+      <v-divider></v-divider>
+      <v-list-item
+        v-for="item in menuItems"
+        :key="item.title"
+        :to="item.to"
+        @click="mobileMenu = false"
+        class="py-2"
+      >
+        <v-list-item-icon>
+          <v-icon>{{ item.icon }}</v-icon>
+        </v-list-item-icon>
+        <v-list-item-title class="text-body-1">
+          {{ item.title }}
+        </v-list-item-title>
+      </v-list-item>
+    </v-list>
+  </v-navigation-drawer>
 </template>
 
 <style scoped>
@@ -142,6 +183,47 @@ const handleLogout = async () => {
 }
 
 a {
-  text-decoration: none; /* Remove underline from RouterLink */
+  text-decoration: none;
+}
+
+.center-links {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 960px) {
+  .v-app-bar {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .logo {
+    font-size: 1.25rem; /* Smaller logo on mobile */
+  }
+
+  .logo sup {
+    font-size: 0.65rem;
+  }
+
+  .profile-btn {
+    padding: 8px !important; /* Larger touch target for profile dropdown */
+  }
+}
+
+/* Mobile Menu Styling */
+.mobile-menu {
+  padding-top: 0 !important;
+}
+
+.mobile-menu .v-list-item:hover {
+  background-color: rgba(87, 142, 126, 0.1);
+}
+
+.mobile-menu .v-list-item-title {
+  color: #3d3d3d;
 }
 </style>
