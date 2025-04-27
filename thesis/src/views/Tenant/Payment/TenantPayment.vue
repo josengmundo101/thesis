@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onErrorCaptured } from 'vue'
 import BillingSummary from './components/BillingSummary.vue'
 import ConfirmPayment from './components/ConfirmPayment.vue'
 import { supabase } from '@/utils/supabase'
@@ -11,7 +11,12 @@ const userId = ref(null)
 const invoiceId = ref(null)
 const paymentIntentId = ref(null)
 
-// Fetch Outstanding Balance
+// Catch component errors
+onErrorCaptured((err) => {
+  console.error('🛑 Component Error:', err)
+  return false
+})
+
 const fetchOutstandingBalance = async () => {
   try {
     if (!invoiceId.value) {
@@ -35,11 +40,14 @@ const fetchOutstandingBalance = async () => {
   }
 }
 
-// Fetch User Data & Invoice
 const fetchUserData = async () => {
   try {
     const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError || !authData?.user) throw new Error('No user is currently logged in.')
+    if (authError || !authData?.user) {
+      console.warn('⚠️ No user logged in:', authError?.message || 'No user')
+      window.location.href = '/login'
+      return
+    }
 
     userId.value = authData.user.id
 
@@ -89,7 +97,6 @@ const fetchUserData = async () => {
   }
 }
 
-// Handle Payment Confirmation
 const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
   try {
     if (!invoiceId.value) {
@@ -97,13 +104,25 @@ const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
       return
     }
 
-    console.log('💳 Initiating payment for invoice:', invoiceId.value)
+    if (!grandTotal.value || grandTotal.value < 1) {
+      alert('⚠️ Invalid payment amount. Please enter a valid amount.')
+      return
+    }
 
-    // Create PayMongo Payment Intent
-    const paymentIntent = await initiatePayment(grandTotal.value)
+    console.log(
+      '💳 Initiating payment for invoice:',
+      invoiceId.value,
+      'Amount:',
+      grandTotal.value,
+      'Method:',
+      paymentMethodType,
+    )
+
+    const paymentIntent = await initiatePayment(grandTotal.value, paymentMethodType)
     paymentIntentId.value = paymentIntent.id
 
-    // Insert Payment Record with payment_intent_id
+    console.log('🔍 Payment Intent Response:', JSON.stringify(paymentIntent, null, 2))
+
     const { error: paymentError } = await supabase.from('payment').insert([
       {
         amount: grandTotal.value,
@@ -124,9 +143,17 @@ const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
 
     console.log('✅ Payment Intent created:', paymentIntent)
 
-    // Handle redirect for GCash/PayMaya
     if (paymentMethodType === 'gcash' || paymentMethodType === 'paymaya') {
+      if (!paymentIntent.attributes.next_action) {
+        console.error('⚠️ No next_action in payment intent:', {
+          status: paymentIntent.attributes.status,
+          payment_method_allowed: paymentIntent.attributes.payment_method_allowed,
+        })
+        alert('Payment initiation failed: No redirect action available. Please try again.')
+        return
+      }
       const redirectUrl = paymentIntent.attributes.next_action.redirect.url
+      console.log('🔗 Redirecting to:', redirectUrl)
       window.location.href = redirectUrl
     } else if (paymentMethodType === 'card') {
       alert('Card payment not implemented yet. Please select GCash or PayMaya.')
@@ -137,19 +164,18 @@ const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
   }
 }
 
-// Handle Payment Callback
 const checkPaymentCallback = async () => {
-  const urlParams = new URLSearchParams(window.location.search)
-  const paymentIntentId = urlParams.get('payment_intent_id')
-  const error = urlParams.get('error')
+  try {
+    const urlParams = new URLSearchParams(window.location.search)
+    const paymentIntentId = urlParams.get('payment_intent_id')
+    const error = urlParams.get('error')
 
-  if (error) {
-    alert('Payment failed. Please try again.')
-    return
-  }
+    if (error) {
+      alert('Payment failed. Please try again.')
+      return
+    }
 
-  if (paymentIntentId) {
-    try {
+    if (paymentIntentId) {
       const paymentIntent = await verifyPaymentIntent(paymentIntentId)
       const paymentStatus = paymentIntent.attributes.status
 
@@ -183,22 +209,25 @@ const checkPaymentCallback = async () => {
         console.error('⚠️ Payment failed or pending:', paymentStatus)
         alert('Payment not completed. Please try again.')
       }
-    } catch (err) {
-      console.error('⚠️ Error verifying payment:', err)
-      alert('Error verifying payment: ' + err.message)
     }
+  } catch (err) {
+    console.error('⚠️ Error verifying payment:', err)
+    alert('Error verifying payment: ' + err.message)
   }
 }
 
-// Handle Total Updates
 const handleTotalUpdate = (totals) => {
   currentTotal.value = totals.currentTotal
   grandTotal.value = totals.grandTotal
 }
 
-// Initial Fetch
-fetchUserData()
-checkPaymentCallback()
+// Initialize
+try {
+  fetchUserData()
+  checkPaymentCallback()
+} catch (error) {
+  console.error('🛑 Initialization Error:', error)
+}
 </script>
 
 <template>
