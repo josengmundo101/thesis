@@ -3,11 +3,13 @@ import { ref } from 'vue'
 import BillingSummary from './components/BillingSummary.vue'
 import ConfirmPayment from './components/ConfirmPayment.vue'
 import { supabase } from '@/utils/supabase'
+import { initiatePayment, verifyPaymentIntent } from '@/api/paymongo'
 
 const currentTotal = ref(0)
 const grandTotal = ref(0)
 const userId = ref(null)
 const invoiceId = ref(null)
+const paymentIntentId = ref(null)
 
 // Fetch Outstanding Balance
 const fetchOutstandingBalance = async () => {
@@ -49,7 +51,6 @@ const fetchUserData = async () => {
 
     if (userError) throw userError
 
-    // If user has no invoice, create one
     if (!userData?.invoice_id) {
       console.log('🟡 No invoice found. Creating new invoice...')
 
@@ -71,7 +72,6 @@ const fetchUserData = async () => {
       invoiceId.value = newInvoice.invoice_id
       console.log('✅ New invoice created:', invoiceId.value)
 
-      // Link new invoice to the user
       const { error: updateError } = await supabase
         .from('users')
         .update({ invoice_id: invoiceId.value })
@@ -83,7 +83,6 @@ const fetchUserData = async () => {
       console.log('✅ Existing invoice found:', invoiceId.value)
     }
 
-    // Fetch outstanding balance after invoice is assigned
     await fetchOutstandingBalance()
   } catch (error) {
     console.error('⚠️ Error fetching user data:', error.message)
@@ -91,24 +90,29 @@ const fetchUserData = async () => {
 }
 
 // Handle Payment Confirmation
-const handleConfirmPayment = async () => {
+const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
   try {
     if (!invoiceId.value) {
       alert('⚠️ No invoice assigned. Cannot process payment.')
       return
     }
 
-    console.log('💳 Processing payment for invoice:', invoiceId.value)
+    console.log('💳 Initiating payment for invoice:', invoiceId.value)
 
-    // Insert Payment Record
+    // Create PayMongo Payment Intent
+    const paymentIntent = await initiatePayment(grandTotal.value)
+    paymentIntentId.value = paymentIntent.id
+
+    // Insert Payment Record with payment_intent_id
     const { error: paymentError } = await supabase.from('payment').insert([
       {
         amount: grandTotal.value,
-        payment_method: 'GCash',
+        payment_method: paymentMethodType,
         payment_date: new Date().toISOString(),
         status: 'pending',
         user_id: userId.value,
         invoice_id: invoiceId.value,
+        payment_intent_id: paymentIntentId.value,
       },
     ])
 
@@ -118,41 +122,75 @@ const handleConfirmPayment = async () => {
       return
     }
 
-    console.log('✅ Payment saved successfully')
+    console.log('✅ Payment Intent created:', paymentIntent)
 
-    // Calculate next due date (1 month advance)
-    const nextDueDate = new Date()
-    nextDueDate.setMonth(nextDueDate.getMonth() + 1)
-    const formattedNextDueDate = nextDueDate.toISOString().slice(0, 10)
-
-    // Update Invoice (Reset Outstanding Balance & Advance Due Date)
-    const { error: invoiceUpdateError } = await supabase
-      .from('invoices')
-      .update({
-        outstanding_balance: 0, // Reset balance after payment
-        status: 'approved', // Mark as paid
-        due_date: formattedNextDueDate, // Move due date forward
-      })
-      .eq('invoice_id', invoiceId.value)
-
-    if (invoiceUpdateError) {
-      console.error('⚠️ Error updating invoice:', invoiceUpdateError)
-      alert('Failed to update invoice: ' + invoiceUpdateError.message)
-      return
+    // Handle redirect for GCash/PayMaya
+    if (paymentMethodType === 'gcash' || paymentMethodType === 'paymaya') {
+      const redirectUrl = paymentIntent.attributes.next_action.redirect.url
+      window.location.href = redirectUrl
+    } else if (paymentMethodType === 'card') {
+      alert('Card payment not implemented yet. Please select GCash or PayMaya.')
     }
-
-    console.log('✅ Invoice updated successfully. Outstanding balance reset.')
-
-    alert('Payment successful! Your outstanding balance is now 0.')
-
-    // Refresh balance after payment
-    await fetchOutstandingBalance()
   } catch (err) {
     console.error('⚠️ Unexpected error:', err)
+    alert('Payment failed: ' + err.message)
   }
 }
 
-// Update Totals from BillingSummary
+// Handle Payment Callback
+const checkPaymentCallback = async () => {
+  const urlParams = new URLSearchParams(window.location.search)
+  const paymentIntentId = urlParams.get('payment_intent_id')
+  const error = urlParams.get('error')
+
+  if (error) {
+    alert('Payment failed. Please try again.')
+    return
+  }
+
+  if (paymentIntentId) {
+    try {
+      const paymentIntent = await verifyPaymentIntent(paymentIntentId)
+      const paymentStatus = paymentIntent.attributes.status
+
+      if (paymentStatus === 'succeeded') {
+        const { error: paymentUpdateError } = await supabase
+          .from('payment')
+          .update({ status: 'completed' })
+          .eq('payment_intent_id', paymentIntentId)
+
+        if (paymentUpdateError) throw paymentUpdateError
+
+        const nextDueDate = new Date()
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1)
+        const formattedNextDueDate = nextDueDate.toISOString().slice(0, 10)
+
+        const { error: invoiceUpdateError } = await supabase
+          .from('invoices')
+          .update({
+            outstanding_balance: 0,
+            status: 'approved',
+            due_date: formattedNextDueDate,
+          })
+          .eq('invoice_id', invoiceId.value)
+
+        if (invoiceUpdateError) throw invoiceUpdateError
+
+        console.log('✅ Payment completed and invoice updated.')
+        alert('Payment successful! Your outstanding balance is now 0.')
+        await fetchOutstandingBalance()
+      } else {
+        console.error('⚠️ Payment failed or pending:', paymentStatus)
+        alert('Payment not completed. Please try again.')
+      }
+    } catch (err) {
+      console.error('⚠️ Error verifying payment:', err)
+      alert('Error verifying payment: ' + err.message)
+    }
+  }
+}
+
+// Handle Total Updates
 const handleTotalUpdate = (totals) => {
   currentTotal.value = totals.currentTotal
   grandTotal.value = totals.grandTotal
@@ -160,10 +198,11 @@ const handleTotalUpdate = (totals) => {
 
 // Initial Fetch
 fetchUserData()
+checkPaymentCallback()
 </script>
 
 <template>
-  <v-container class="py-10">
+  <v-container fluid class="py-10">
     <v-row justify="center">
       <v-col cols="12" md="8" class="text-center hover-scale fade-in delay-100">
         <h2 class="text-h4 font-weight-bold text-white mb-2">Make a Payment</h2>
