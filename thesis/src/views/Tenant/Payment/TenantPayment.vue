@@ -128,7 +128,7 @@ const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
         amount: grandTotal.value,
         payment_method: paymentMethodType,
         payment_date: new Date().toISOString(),
-        status: 'pending',
+        status: 'pending', // Always pending for admin approval
         user_id: userId.value,
         invoice_id: invoiceId.value,
         payment_intent_id: paymentIntentId.value,
@@ -148,6 +148,7 @@ const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
         console.error('⚠️ No next_action in payment intent:', {
           status: paymentIntent.attributes.status,
           payment_method_allowed: paymentIntent.attributes.payment_method_allowed,
+          intent_id: paymentIntent.id,
         })
         alert('Payment initiation failed: No redirect action available. Please try again.')
         return
@@ -155,12 +156,17 @@ const handleConfirmPayment = async (paymentMethodType = 'gcash') => {
       const redirectUrl = paymentIntent.attributes.next_action.redirect.url
       console.log('🔗 Redirecting to:', redirectUrl)
       window.location.href = redirectUrl
-    } else if (paymentMethodType === 'card') {
-      alert('Card payment not implemented yet. Please select GCash or PayMaya.')
+    } else {
+      alert('Unsupported payment method. Please select GCash or PayMaya.')
     }
   } catch (err) {
-    console.error('⚠️ Unexpected error:', err)
-    alert('Payment failed: ' + err.message)
+    console.error('⚠️ Unexpected error:', {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+    })
+    const errorMessage = err.response?.data?.errors?.[0]?.detail || err.message
+    alert(`Payment failed: ${errorMessage}`)
   }
 }
 
@@ -180,13 +186,6 @@ const checkPaymentCallback = async () => {
       const paymentStatus = paymentIntent.attributes.status
 
       if (paymentStatus === 'succeeded') {
-        const { error: paymentUpdateError } = await supabase
-          .from('payment')
-          .update({ status: 'completed' })
-          .eq('payment_intent_id', paymentIntentId)
-
-        if (paymentUpdateError) throw paymentUpdateError
-
         const nextDueDate = new Date()
         nextDueDate.setMonth(nextDueDate.getMonth() + 1)
         const formattedNextDueDate = nextDueDate.toISOString().slice(0, 10)
@@ -195,7 +194,7 @@ const checkPaymentCallback = async () => {
           .from('invoices')
           .update({
             outstanding_balance: 0,
-            status: 'approved',
+            status: 'approved', // Invoice reflects payment, pending admin approval for payment status
             due_date: formattedNextDueDate,
           })
           .eq('invoice_id', invoiceId.value)
@@ -203,7 +202,7 @@ const checkPaymentCallback = async () => {
         if (invoiceUpdateError) throw invoiceUpdateError
 
         console.log('✅ Payment completed and invoice updated.')
-        alert('Payment successful! Your outstanding balance is now 0.')
+        alert('Payment successful! Your outstanding balance is now 0. Awaiting admin approval.')
         await fetchOutstandingBalance()
       } else {
         console.error('⚠️ Payment failed or pending:', paymentStatus)
@@ -211,8 +210,15 @@ const checkPaymentCallback = async () => {
       }
     }
   } catch (err) {
-    console.error('⚠️ Error verifying payment:', err)
-    alert('Error verifying payment: ' + err.message)
+    console.error('⚠️ Error verifying payment:', {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+    })
+    const errorMessage = err.message.includes('payment_status_check')
+      ? 'Invalid payment status. Please try again or contact support.'
+      : err.response?.data?.errors?.[0]?.detail || err.message
+    alert(`Error verifying payment: ${errorMessage}`)
   }
 }
 
