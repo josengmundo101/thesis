@@ -1,30 +1,35 @@
 <script setup>
 import { useUtilityStore } from '@/stores/useUtilityStore'
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, defineProps } from 'vue'
 import { supabase } from '@/utils/supabase'
+import { useToast } from 'vue-toastification'
+
+const props = defineProps({
+  refreshKey: {
+    type: Number,
+    required: true,
+  },
+})
 
 const store = useUtilityStore()
 const outstandingBalance = ref(0)
 const currentTotal = ref(0)
 const grandTotal = ref(0)
-
-// Emit to parent
+const isLoading = ref(false)
+const toast = useToast()
 const emit = defineEmits(['update-total'])
 
-// Fetch outstanding balance for logged-in user
-const fetchOutstandingBalance = async () => {
+const fetchData = async () => {
+  isLoading.value = true
   try {
-    // Get the logged-in user
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser()
     if (error) throw error
     if (!user) throw new Error('No user is currently logged in.')
+    console.log('BillingSummary - Auth User ID:', user.id)
 
-    console.log('✅ User Object:', user) // 👈 Log full user object
-
-    // ✅ Fetch invoice_id from the users table
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('invoice_id')
@@ -33,11 +38,8 @@ const fetchOutstandingBalance = async () => {
 
     if (userError) throw userError
 
-    // ✅ If invoice_id is missing, create one
     if (!userData.invoice_id) {
-      console.warn('⚠️ No invoice found. Creating one...')
-
-      // Create a new invoice
+      console.warn('BillingSummary - No invoice found. Creating one...')
       const { data: newInvoice, error: createError } = await supabase
         .from('invoices')
         .insert([
@@ -53,9 +55,8 @@ const fetchOutstandingBalance = async () => {
 
       if (createError) throw createError
 
-      console.log('✅ New Invoice Created:', newInvoice.invoice_id)
+      console.log('BillingSummary - New Invoice Created:', newInvoice.invoice_id)
 
-      // Update the user's invoice_id
       const { error: updateError } = await supabase
         .from('users')
         .update({ invoice_id: newInvoice.invoice_id })
@@ -63,11 +64,10 @@ const fetchOutstandingBalance = async () => {
 
       if (updateError) throw updateError
 
-      console.log('✅ User invoice_id updated:', newInvoice.invoice_id)
-      userData.invoice_id = newInvoice.invoice_id // Update the local reference
+      console.log('BillingSummary - User invoice_id updated:', newInvoice.invoice_id)
+      userData.invoice_id = newInvoice.invoice_id
     }
 
-    // ✅ Fetch outstanding balance from invoices table
     const { data: invoiceData, error: invoiceError } = await supabase
       .from('invoices')
       .select('outstanding_balance')
@@ -75,108 +75,105 @@ const fetchOutstandingBalance = async () => {
       .single()
 
     if (invoiceError) throw invoiceError
-
-    // ✅ Set outstanding balance
     outstandingBalance.value = invoiceData?.outstanding_balance || 0
+    console.log('BillingSummary - Outstanding Balance:', outstandingBalance.value)
 
-    // ✅ Set total values
+    await store.fetchSettings()
+    console.log('BillingSummary - Fetching tenant rates for user_id:', user.id)
+    await store.fetchTenantRates(user.id)
+
     currentTotal.value = store.total
     grandTotal.value = currentTotal.value + outstandingBalance.value
+    console.log('BillingSummary - Current Total:', currentTotal.value)
+    console.log('BillingSummary - Grand Total:', grandTotal.value)
 
-    console.log('✅ Outstanding Balance:', outstandingBalance.value)
-    console.log('✅ Current Total:', currentTotal.value)
-    console.log('✅ Grand Total:', grandTotal.value)
+    emit('update-total', {
+      currentTotal: currentTotal.value,
+      grandTotal: grandTotal.value,
+    })
   } catch (error) {
-    console.error('⚠️ Error fetching outstanding balance:', error.message)
+    console.error('BillingSummary - Error fetching data:', error.message)
+    toast.error('Failed to load bill summary: ' + error.message)
+  } finally {
+    isLoading.value = false
+    if (store.errorMessage) {
+      toast.error(store.errorMessage)
+    }
   }
 }
 
-// Calculate Totals
-const calculateTotals = () => {
-  currentTotal.value =
-    Number(store.rent) + Number(store.electricity) + Number(store.water) + Number(store.wifi)
+onMounted(fetchData)
+
+watch(
+  () => props.refreshKey,
+  () => {
+    console.log('BillingSummary - Refresh triggered:', props.refreshKey)
+    fetchData()
+  },
+)
+
+watch([store.total, outstandingBalance], () => {
+  currentTotal.value = store.total
   grandTotal.value = currentTotal.value + outstandingBalance.value
-  console.log('✅ Current Total:', currentTotal.value)
-  console.log('✅ Grand Total:', grandTotal.value)
+  console.log('BillingSummary - Updated Current Total:', currentTotal.value)
+  console.log('BillingSummary - Updated Grand Total:', grandTotal.value)
 
   emit('update-total', {
     currentTotal: currentTotal.value,
-    grandTotal: currentTotal.value,
+    grandTotal: grandTotal.value,
   })
-}
-
-// Fetch data on mount
-onMounted(async () => {
-  try {
-    await store.fetchSettings() // ✅ Ensure settings are loaded first
-    await fetchOutstandingBalance() // ✅ Then fetch balance
-
-    // ✅ Calculate totals once
-    calculateTotals()
-  } catch (error) {
-    console.error('⚠️ Error during onMounted:', error.message)
-  }
-})
-
-// Watch for changes
-watch([store.rent, store.electricity, store.water, store.wifi, outstandingBalance], () => {
-  calculateTotals()
 })
 </script>
 
 <template>
-  <v-card elevation="1" class="hover-scale fade-in delay-100">
+  <v-card elevation="1" class="hover-scale fade-in delay-100" :disabled="isLoading">
     <v-card-title class="text-h6 font-weight-bold">Bill Summary</v-card-title>
     <v-divider></v-divider>
-    <v-card-text>
+    <v-progress-linear
+      v-if="isLoading"
+      indeterminate
+      color="primary"
+      class="mb-4"
+    ></v-progress-linear>
+    <v-card-text v-else>
       <v-list density="compact">
-        <!-- Rent -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon color="deep-orange">mdi-home-city</v-icon>
           </template>
           <v-list-item-title>Rent</v-list-item-title>
           <v-list-item-subtitle class="font-weight-bold text-primary">
-            ₱{{ store.rent }}
+            ₱{{ store.effectiveRates.rent.toLocaleString() }}
           </v-list-item-subtitle>
         </v-list-item>
-
-        <!-- Electricity -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon color="amber">mdi-lightning-bolt</v-icon>
           </template>
           <v-list-item-title>Electricity</v-list-item-title>
           <v-list-item-subtitle class="font-weight-bold text-primary">
-            ₱{{ store.electricity.toLocaleString() }}
+            ₱{{ store.effectiveRates.electricity.toLocaleString() }}
           </v-list-item-subtitle>
         </v-list-item>
-
-        <!-- Water -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon color="blue">mdi-water</v-icon>
           </template>
           <v-list-item-title>Water</v-list-item-title>
           <v-list-item-subtitle class="font-weight-bold text-primary">
-            ₱{{ store.water.toLocaleString() }}
+            ₱{{ store.effectiveRates.water.toLocaleString() }}
           </v-list-item-subtitle>
         </v-list-item>
-
-        <!-- Internet -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon color="green">mdi-wifi</v-icon>
           </template>
           <v-list-item-title>Internet</v-list-item-title>
           <v-list-item-subtitle class="font-weight-bold text-primary">
-            ₱{{ store.wifi.toLocaleString() }}
+            ₱{{ store.effectiveRates.wifi.toLocaleString() }}
           </v-list-item-subtitle>
         </v-list-item>
-
         <v-divider class="my-2"></v-divider>
-
-        <!-- Current Total -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon color="purple">mdi-calculator</v-icon>
@@ -186,8 +183,6 @@ watch([store.rent, store.electricity, store.water, store.wifi, outstandingBalanc
             ₱{{ currentTotal.toLocaleString() }}
           </v-list-item-subtitle>
         </v-list-item>
-
-        <!-- Outstanding Balance -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon color="red">mdi-alert-circle</v-icon>
@@ -197,10 +192,7 @@ watch([store.rent, store.electricity, store.water, store.wifi, outstandingBalanc
             ₱{{ outstandingBalance.toLocaleString() }}
           </v-list-item-subtitle>
         </v-list-item>
-
         <v-divider class="my-2"></v-divider>
-
-        <!-- Grand Total -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon color="primary">mdi-cash</v-icon>
@@ -221,12 +213,10 @@ watch([store.rent, store.electricity, store.water, store.wifi, outstandingBalanc
     transform 0.2s ease-in-out,
     box-shadow 0.2s;
 }
-
 .hover-scale:hover {
   transform: translateY(-3px);
   box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.08);
 }
-
 .text-primary {
   color: #578e7e;
 }

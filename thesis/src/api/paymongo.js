@@ -16,7 +16,16 @@ export const initiatePayment = async (amount, paymentMethodType) => {
   if (!PAYMONGO_SECRET_KEY) {
     throw new Error('PAYMONGO_SECRET_KEY is not defined')
   }
-
+  // Validate amount
+  const amountInCentavos = Math.round(amount * 100)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Invalid amount: must be a positive number')
+  }
+  if (amountInCentavos < 1000) {
+    throw new Error(
+      `Amount must be at least ₱10.00 (1000 centavos). Got: ₱${(amountInCentavos / 100).toFixed(2)}`,
+    )
+  }
   let paymentIntent
 
   const createPaymentIntent = async () => {

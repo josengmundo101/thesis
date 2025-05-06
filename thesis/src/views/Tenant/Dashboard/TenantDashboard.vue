@@ -6,10 +6,11 @@ import SummaryCard from './components/SummaryCard.vue'
 import NotificationCard from './components/NotificationCard.vue'
 import TenantHistory from './components/TenantHistory.vue'
 
-const summary = ref({ balance: 0, dueDate: '' })
+const summary = ref({ balance: 0, arrears: 0, prepaidBalance: 0, dueDate: '' })
 const tenantName = ref('Tenant')
 const userId = ref(null)
 const notifications = ref([])
+const tenant = ref(null)
 
 const fetchTenantDetails = async () => {
   try {
@@ -25,7 +26,7 @@ const fetchTenantDetails = async () => {
     const { data: tenantData, error: tenantError } = await supabase
       .from('users')
       .select(
-        `firstname, lastname, invoice_id, invoices (total_amount, outstanding_balance, due_date)`,
+        `firstname, lastname, user_id, invoice_id, invoices (total_amount, outstanding_balance, arrears, prepaid_balance, due_date)`,
       )
       .eq('user_id', userId.value)
       .single()
@@ -35,12 +36,16 @@ const fetchTenantDetails = async () => {
 
     if (tenantData) {
       tenantName.value = `${tenantData.firstname} ${tenantData.lastname}`
+      tenant.value = { user_id: tenantData.user_id }
       if (tenantData.invoices) {
         summary.value = {
           balance: tenantData.invoices.outstanding_balance,
+          arrears: tenantData.invoices.arrears,
+          prepaidBalance: tenantData.invoices.prepaid_balance,
           dueDate: new Date(tenantData.invoices.due_date).toLocaleDateString(),
         }
       }
+      console.log('TenantDashboard - Tenant set for BillingCard:', tenant.value)
     }
   } catch (error) {
     console.error('TenantDashboard - Error fetching tenant details:', error.message)
@@ -49,7 +54,6 @@ const fetchTenantDetails = async () => {
 
 const fetchNotifications = async () => {
   try {
-    // Get the current user's user_id
     const {
       data: { user },
       error: authError,
@@ -59,7 +63,7 @@ const fetchNotifications = async () => {
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', user.id) // Filter by the logged-in tenant's user_id
+      .eq('user_id', user.id)
       .order('timestamp', { ascending: false })
       .limit(50)
     if (error) throw error
@@ -73,7 +77,6 @@ const fetchNotifications = async () => {
   }
 }
 
-// Real-time subscription for notifications
 onMounted(() => {
   const subscription = supabase
     .channel('notifications-channel')
@@ -86,7 +89,6 @@ onMounted(() => {
       },
       (payload) => {
         const newNotification = payload.new
-        // Only add the notification if it belongs to the logged-in tenant
         supabase.auth.getUser().then(({ data: { user } }) => {
           if (newNotification.user_id === user.id) {
             notifications.value = [newNotification, ...notifications.value].slice(0, 50)
@@ -95,6 +97,9 @@ onMounted(() => {
       },
     )
     .subscribe()
+
+  fetchTenantDetails()
+  fetchNotifications()
 
   return () => {
     supabase.removeChannel(subscription)
@@ -118,7 +123,6 @@ const clearNotifications = async () => {
 
     if (error) throw error
 
-    // Clear the local notifications array
     notifications.value = []
     console.log('TenantDashboard - Cleared notifications for user:', user.id)
   } catch (error) {
@@ -139,12 +143,6 @@ const tenantNotifications = computed(() => {
   )
   return filtered
 })
-
-onMounted(() => {
-  console.log('TenantDashboard - Current origin:', window.location.origin)
-  fetchTenantDetails()
-  fetchNotifications()
-})
 </script>
 
 <template>
@@ -160,10 +158,15 @@ onMounted(() => {
 
     <v-row class="mb-3">
       <v-col cols="12" md="6">
-        <BillingCard />
+        <BillingCard :tenant="tenant" />
       </v-col>
       <v-col cols="12" md="6">
-        <SummaryCard :balance="summary.balance" :dueDate="summary.dueDate" />
+        <SummaryCard
+          :balance="summary.balance"
+          :arrears="summary.arrears"
+          :prepaidBalance="summary.prepaidBalance"
+          :dueDate="summary.dueDate"
+        />
       </v-col>
     </v-row>
 

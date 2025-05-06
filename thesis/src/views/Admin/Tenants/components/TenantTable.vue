@@ -21,7 +21,13 @@ const props = defineProps({
 })
 
 // Emits for actions
-const emit = defineEmits(['pageChange', 'viewDetails', 'assignRoom', 'view-ledger'])
+const emit = defineEmits([
+  'pageChange',
+  'viewDetails',
+  'assignRoom',
+  'view-ledger',
+  'set-rates', // ✅ Add this line
+])
 
 // Local page state
 const pageNumber = ref(props.page)
@@ -93,13 +99,11 @@ const getRoomDetails = (tenant) => {
           <td>
             <v-chip
               :color="
-                tenant.status === 'approved'
-                  ? 'green'
-                  : tenant.status === 'pending'
-                    ? 'orange'
-                    : tenant.status === 'paid'
-                      ? 'blue'
-                      : 'red'
+                tenant.status === 'Paid'
+                  ? 'success'
+                  : tenant.status === 'Partial'
+                    ? 'warning'
+                    : 'error'
               "
               small
             >
@@ -118,6 +122,10 @@ const getRoomDetails = (tenant) => {
               @click="emit('assignRoom', tenant)"
             >
               <v-icon left>mdi-home</v-icon> Assign
+            </v-btn>
+
+            <v-btn size="small" flat @click="$emit('set-rates', tenant)">
+              <v-icon>mdi-cash</v-icon>Rates
             </v-btn>
           </td>
         </tr>

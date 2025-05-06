@@ -1,81 +1,90 @@
 <script setup>
 import { ref, onMounted, defineProps, defineEmits } from 'vue'
-import { supabase } from '@/utils/supabase' // Adjust path to your Supabase client
+import { supabase } from '@/utils/supabase'
+import { useUtilityStore } from '@/stores/useUtilityStore'
+import { useToast } from 'vue-toastification'
 
-// Define props
 const props = defineProps({
-  paymentAmount: {
-    type: Number,
-    required: true,
-  },
   userId: {
-    // Optional prop for user identification
     type: String,
     default: null,
   },
+  invoiceId: {
+    type: String,
+    required: true,
+  },
 })
 
-// Define emits - add 'close' to the list
-const emit = defineEmits(['confirm', 'close'])
+const emit = defineEmits(['confirm-payment', 'close'])
 
-// Reactive data
+const store = useUtilityStore()
+const toast = useToast()
 const userContact = ref('Loading...')
 const gcashNumber = ref('Loading...')
+const paymentAmount = ref('')
+const paymentMethodType = ref('gcash')
 const isConfirmed = ref(false)
+const isSubmitting = ref(false)
+const invoiceData = ref({
+  total_amount: 0,
+  outstanding_balance: 0,
+  arrears: 0,
+})
 
-// Fetch data from Supabase on mount
 onMounted(async () => {
   try {
-    // Fetch Gcash number from settings table
     const { data: settingsData, error: settingsError } = await supabase
       .from('settings')
       .select('gcash_number')
-      .single() // Assumes one row; adjust if multiple rows exist
-
+      .single()
     if (settingsError) throw settingsError
     gcashNumber.value = settingsData?.gcash_number || 'Not available'
 
-    // Fetch user contact number from users table
-    // Assuming userId is provided; adjust logic if user is authenticated differently
-    if (props.userId) {
-      // use provided userId
+    const userId = props.userId || (await supabase.auth.getUser()).data.user?.id
+    if (userId) {
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('contact_number')
-        .eq('user_id', props.userId)
+        .eq('user_id', userId)
         .single()
       if (userError) throw userError
       userContact.value = userData?.contact_number || 'Not available'
     } else {
-      // fallback to authenticated user
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser()
-      if (error) throw error
+      userContact.value = 'Not available'
+    }
 
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('contact_number')
-        .eq('user_id', user.id)
-        .single()
-      if (userError) throw userError
-      userContact.value = userData?.contact_number || 'Not available'
+    const data = await store.fetchInvoiceData(props.invoiceId)
+    if (data) {
+      invoiceData.value = data
+    } else {
+      toast.error('Failed to load invoice details.')
     }
   } catch (error) {
-    console.error('Error fetching data from Supabase:', error.message)
+    console.error('Error fetching data:', error.message)
     userContact.value = 'Error loading contact'
     gcashNumber.value = 'Error loading Gcash number'
+    toast.error('Error loading data.')
   }
 })
 
-// Confirm payment action
-const confirmPayment = () => {
-  isConfirmed.value = true
-  emit('confirm') // Emit to parent to finalize payment
+const confirmPayment = async () => {
+  isSubmitting.value = true
+  try {
+    const amount = Number(paymentAmount.value)
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid payment amount.')
+      return
+    }
+
+    isConfirmed.value = true
+    emit('confirm-payment', { amount, paymentMethodType: paymentMethodType.value })
+  } catch (error) {
+    toast.error('Failed to initiate payment.')
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
-// Close dialog action
 const closeDialog = () => {
   emit('close')
 }
@@ -91,7 +100,6 @@ const closeDialog = () => {
     <v-divider class="mx-4"></v-divider>
 
     <v-card-text>
-      <!-- Contact Information -->
       <v-row class="my-2">
         <v-col cols="12" sm="6">
           <v-sheet class="pa-3 rounded-lg bg-grey-lighten-4">
@@ -113,19 +121,83 @@ const closeDialog = () => {
         </v-col>
       </v-row>
 
-      <!-- Payment Details -->
       <v-row class="my-2">
+        <v-col cols="12">
+          <v-sheet class="pa-3 rounded-lg bg-grey-lighten-4">
+            <v-row>
+              <v-col cols="12" sm="4">
+                <div class="text-caption text-grey-darken-1">Total Amount Due</div>
+                <div class="text-h6 font-weight-medium">
+                  ₱{{
+                    invoiceData.total_amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })
+                  }}
+                </div>
+              </v-col>
+              <v-col cols="12" sm="4">
+                <div class="text-caption text-grey-darken-1">Outstanding Balance</div>
+                <div class="text-h6 font-weight-medium text-error">
+                  ₱{{
+                    invoiceData.outstanding_balance.toLocaleString('en-PH', {
+                      minimumFractionDigits: 2,
+                    })
+                  }}
+                </div>
+              </v-col>
+              <v-col cols="12" sm="4">
+                <div class="text-caption text-grey-darken-1">Arrears</div>
+                <div class="text-h6 font-weight-medium text-error">
+                  ₱{{ invoiceData.arrears.toLocaleString('en-PH', { minimumFractionDigits: 2 }) }}
+                </div>
+              </v-col>
+            </v-row>
+          </v-sheet>
+        </v-col>
+      </v-row>
+
+      <v-row class="my-2" v-if="!isConfirmed">
+        <v-col cols="12">
+          <v-text-field
+            v-model="paymentAmount"
+            label="Payment Amount (₱)"
+            type="number"
+            min="0"
+            step="0.01"
+            prepend-icon="mdi-currency-php"
+            :disabled="isSubmitting"
+            required
+          ></v-text-field>
+          <v-select
+            v-model="paymentMethodType"
+            label="Payment Method"
+            :items="[
+              { title: 'GCash', value: 'gcash' },
+              { title: 'PayMaya', value: 'paymaya' },
+            ]"
+            prepend-icon="mdi-credit-card"
+            :disabled="isSubmitting"
+          ></v-select>
+          <v-alert
+            v-if="paymentAmount && Number(paymentAmount) < invoiceData.outstanding_balance"
+            type="warning"
+            density="compact"
+            class="mt-2"
+          >
+            Partial payment may result in arrears if not fully paid by due date.
+          </v-alert>
+        </v-col>
+      </v-row>
+
+      <v-row v-if="isConfirmed" class="my-2">
         <v-col cols="12">
           <v-sheet class="pa-3 rounded-lg bg-success-lighten-5 text-center">
             <div class="text-caption text-grey-darken-1">Payment Amount</div>
             <div class="text-h5 font-weight-bold text-success">
-              ₱{{ paymentAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 }) }}
+              ₱{{ Number(paymentAmount).toLocaleString('en-PH', { minimumFractionDigits: 2 }) }}
             </div>
           </v-sheet>
         </v-col>
       </v-row>
 
-      <!-- Confirmation Status -->
       <v-row class="my-2">
         <v-col cols="12" class="text-center">
           <v-chip
@@ -134,12 +206,11 @@ const closeDialog = () => {
             size="large"
             :prepend-icon="isConfirmed ? 'mdi-check-circle' : 'mdi-clock-outline'"
           >
-            {{ isConfirmed ? 'Payment Confirmed' : 'Awaiting Confirmation' }}
+            {{ isConfirmed ? 'Payment Initiated' : 'Awaiting Confirmation' }}
           </v-chip>
         </v-col>
       </v-row>
 
-      <!-- Action Buttons -->
       <v-row v-if="!isConfirmed" class="mt-4">
         <v-col cols="12" class="text-center">
           <v-btn
@@ -147,10 +218,20 @@ const closeDialog = () => {
             prepend-icon="mdi-check"
             variant="elevated"
             @click="confirmPayment"
+            :disabled="isSubmitting || !paymentAmount"
+            :loading="isSubmitting"
           >
             Confirm Payment
           </v-btn>
-          <v-btn color="grey" variant="text" class="ml-2" @click="closeDialog"> Cancel </v-btn>
+          <v-btn
+            color="grey"
+            variant="text"
+            class="ml-2"
+            @click="closeDialog"
+            :disabled="isSubmitting"
+          >
+            Cancel
+          </v-btn>
         </v-col>
       </v-row>
     </v-card-text>

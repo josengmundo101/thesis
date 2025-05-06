@@ -8,6 +8,7 @@ import ViewDetails from './components/ViewDetails.vue'
 import AssignRoom from './components/AssignRoom.vue'
 import TenantLedger from './components/TenantLedger.vue'
 import PendingTenantApproval from './components/PendingTenantsApproval.vue'
+import SetTenantRates from './components/SetTenantRates.vue'
 
 const toast = useToast()
 const tenants = ref([])
@@ -20,11 +21,13 @@ const detailsModalOpen = ref(false)
 const assignModalOpen = ref(false)
 const ITEMS_PER_PAGE = 5
 const showLedger = ref(false)
+const ratesModalOpen = ref(false)
 
 const fetchTenants = async () => {
   loading.value = true
   try {
-    const { data, error } = await supabase
+    // Fetch tenants with their invoices and payments
+    const { data: tenantData, error: tenantError } = await supabase
       .from('users')
       .select(
         `
@@ -37,19 +40,40 @@ const fetchTenants = async () => {
           )
         ),
         invoices (
-          status
+          invoice_id,
+          total_amount,
+          outstanding_balance
+        ),
+        payment (
+          amount,
+          payment_date
         )
       `,
       )
       .eq('role', 'tenant')
 
-    if (error) throw error
+    if (tenantError) throw tenantError
 
-    tenants.value = data.map((tenant) => ({
-      ...tenant,
-      status: tenant?.invoices?.[0]?.status || 'Unpaid', // Use first invoice status
-      bed_assignment: tenant.bed_assignment.length > 0 ? tenant.bed_assignment : null,
-    }))
+    tenants.value = tenantData.map((tenant) => {
+      // Calculate status based on TenantLedger logic
+      let status = 'Unpaid'
+      const invoice = tenant.invoices && tenant.invoices.length > 0 ? tenant.invoices[0] : null
+      const amount_due = invoice ? invoice.total_amount || 0 : 0
+      const amount_paid = tenant.payment.reduce((sum, pmt) => sum + (pmt.amount || 0), 0)
+      const balance = invoice ? invoice.outstanding_balance || 0 : 0
+
+      if (amount_paid >= amount_due && amount_due > 0) {
+        status = 'Paid'
+      } else if (amount_paid > 0) {
+        status = 'Partial'
+      }
+
+      return {
+        ...tenant,
+        status,
+        bed_assignment: tenant.bed_assignment.length > 0 ? tenant.bed_assignment : null,
+      }
+    })
     console.log('Fetched Tenants with Status:', tenants.value)
   } catch (error) {
     console.error('Error fetching tenants:', error.message)
@@ -68,15 +92,37 @@ const subscribeToTenantChanges = () => {
       { event: '*', schema: 'public', table: 'bed_assignment' },
       (payload) => {
         console.log('Bed assignment change:', payload)
-        fetchTenants() // Refetch tenants on any bed assignment change
+        fetchTenants()
       },
     )
+    .subscribe()
+}
+
+const subscribeToInvoiceChanges = () => {
+  supabase
+    .channel('public:invoices')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, (payload) => {
+      console.log('Invoice change:', payload)
+      fetchTenants()
+    })
+    .subscribe()
+}
+
+const subscribeToPaymentChanges = () => {
+  supabase
+    .channel('public:payment')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'payment' }, (payload) => {
+      console.log('Payment change:', payload)
+      fetchTenants()
+    })
     .subscribe()
 }
 
 onMounted(() => {
   fetchTenants()
   subscribeToTenantChanges()
+  subscribeToInvoiceChanges()
+  subscribeToPaymentChanges()
 })
 
 onUnmounted(() => {
@@ -119,7 +165,7 @@ const handleUpdateTenant = (updatedTenant) => {
         {
           bed_side: updatedTenant.bed_side,
           room_id: updatedTenant.room_id,
-          rooms: { room_number: updatedTenant.room_number }, // Ensure room_number is included
+          rooms: { room_number: updatedTenant.room_number },
         },
       ],
     }
@@ -133,6 +179,11 @@ const handleUpdateTenant = (updatedTenant) => {
 const openLedger = (tenant) => {
   selectedTenant.value = tenant
   showLedger.value = true
+}
+
+function handleSetRates(tenant) {
+  selectedTenant.value = tenant
+  ratesModalOpen.value = true // ✅ FIXED: use .value instead of undefined function
 }
 </script>
 
@@ -161,6 +212,7 @@ const openLedger = (tenant) => {
           @view-details="handleViewDetails"
           @assign-room="handleAssignRoom"
           @view-ledger="openLedger"
+          @set-rates="handleSetRates"
         />
       </v-col>
     </v-row>
@@ -200,6 +252,13 @@ const openLedger = (tenant) => {
       @update:model-value="assignModalOpen = $event"
       :tenant="selectedTenant"
       @room-assigned="handleUpdateTenant"
+    />
+
+    <SetTenantRates
+      :model-value="ratesModalOpen"
+      :tenant="selectedTenant"
+      @update:model-value="ratesModalOpen = $event"
+      @rate-updated="fetchTenants"
     />
   </v-container>
 </template>
