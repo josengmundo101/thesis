@@ -1,187 +1,22 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
-import { debounce } from 'lodash'
+import { computed, ref } from 'vue'
 
 export const useUtilityStore = defineStore('utility', () => {
+  const rent = ref(0)
   const electricity = ref(0)
   const water = ref(0)
   const wifi = ref(0)
-  const rent = ref(0)
-  const gcashNumber = ref('')
-  const loading = ref(false)
-  const errorMessage = ref('')
+  const tenantRates = ref({})
   const invoiceId = ref(null)
-  const settingsId = ref('')
-  const tenantRates = ref(null)
+  const errorMessage = ref(null)
 
-  const fetchSettings = async () => {
-    loading.value = true
-    errorMessage.value = ''
-    try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('id, electricity_rate, water_rate, wifi_rate, rent_rate, gcash_number')
-        .single()
-      if (error) throw error
-
-      settingsId.value = data.id
-      electricity.value = Number(data.electricity_rate) || 0
-      water.value = Number(data.water_rate) || 0
-      wifi.value = Number(data.wifi_rate) || 0
-      rent.value = Number(data.rent_rate) || 0
-      gcashNumber.value = data.gcash_number || ''
-      console.log('✅ Settings fetched:', data)
-    } catch (error) {
-      console.error('⚠️ Error fetching utility settings:', error.message)
-      errorMessage.value = 'Failed to fetch default rates: ' + error.message
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const fetchTenantRates = async (userId) => {
-    if (!userId) {
-      console.warn('⚠️ No userId provided for fetchTenantRates')
-      tenantRates.value = null
-      errorMessage.value = 'No tenant ID provided for custom rates.'
-      return
-    }
-    loading.value = true
-    try {
-      const { data, error } = await supabase
-        .from('tenant_rates')
-        .select('rent_rate, water_rate, electricity_rate, wifi_rate')
-        .eq('user_id', userId)
-        .maybeSingle()
-      if (error) throw error
-      tenantRates.value = data
-      if (!data) {
-        console.log('⚠️ No custom rates found for user_id:', userId)
-        errorMessage.value = `No custom rates found for tenant ID: ${userId}.`
-      } else {
-        console.log('✅ Tenant rates fetched for user_id:', userId, data)
-      }
-    } catch (error) {
-      console.error('⚠️ Error fetching tenant rates:', error.message)
-      tenantRates.value = null
-      errorMessage.value = `Failed to fetch custom rates: ${error.message}`
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const fetchInvoiceData = async (invoiceId) => {
-    try {
-      if (!invoiceId) {
-        console.warn('⚠️ No invoice ID provided for fetchInvoiceData')
-        errorMessage.value = 'No invoice ID provided.'
-        return null
-      }
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('total_amount, outstanding_balance, arrears, prepaid_balance, due_date, status')
-        .eq('invoice_id', invoiceId)
-        .single()
-      if (error) throw error
-      console.log('✅ Invoice data fetched:', {
-        invoice_id: invoiceId,
-        total_amount: data.total_amount,
-        outstanding_balance: data.outstanding_balance,
-        arrears: data.arrears,
-        prepaid_balance: data.prepaid_balance,
-        due_date: data.due_date,
-        status: data.status,
-      })
-      return data
-    } catch (error) {
-      console.error('⚠️ Error fetching invoice data:', error.message)
-      errorMessage.value = 'Failed to fetch invoice data: ' + error.message
-      return null
-    }
-  }
-
-  const savePayment = async (paymentData) => {
-    try {
-      const { invoiceId, userId, amount, paymentMethod, paymentIntentId, paymentType, months } =
-        paymentData
-      if (!invoiceId || !userId || !amount || !paymentMethod || !paymentIntentId || !paymentType) {
-        console.warn('⚠️ Invalid payment data:', paymentData)
-        errorMessage.value = 'Missing required payment data.'
-        throw new Error('Missing required payment data.')
-      }
-      if (!['advance', 'partial'].includes(paymentType)) {
-        console.warn('⚠️ Invalid payment_type:', paymentType)
-        errorMessage.value = 'Payment type must be "advance" or "partial".'
-        throw new Error('Invalid payment type.')
-      }
-
-      const paymentRecord = {
-        amount,
-        payment_method: paymentMethod,
-        payment_date: new Date().toISOString(),
-        status: 'pending',
-        user_id: userId,
-        invoice_id: invoiceId,
-        payment_intent_id: paymentIntentId,
-        payment_type: paymentType,
-      }
-
-      if (paymentType === 'advance') {
-        if (!Number.isInteger(months) || months < 1) {
-          console.warn('⚠️ Invalid months for advance payment:', months)
-          errorMessage.value = 'Months must be a positive integer for advance payments.'
-          throw new Error('Invalid months.')
-        }
-        paymentRecord.months = months
-      }
-
-      console.log('💸 Saving payment:', paymentRecord)
-
-      const { data, error } = await supabase
-        .from('payment')
-        .insert([paymentRecord])
-        .select('payment_id')
-        .single()
-      if (error) {
-        console.error('⚠️ Failed to save payment:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        })
-        throw error
-      }
-
-      console.log('✅ Payment saved:', {
-        paymentId: data.payment_id,
-        amount,
-        paymentType,
-        months: paymentRecord.months,
-      })
-      return data.payment_id
-    } catch (error) {
-      console.error('⚠️ Error saving payment:', error.message)
-      errorMessage.value = 'Failed to save payment: ' + error.message
-      throw error
-    }
-  }
-
-  const effectiveRates = computed(() => {
-    const rates = {
-      rent: tenantRates.value?.rent_rate ?? rent.value,
-      water: tenantRates.value?.water_rate ?? water.value,
-      electricity: tenantRates.value?.electricity_rate ?? electricity.value,
-      wifi: tenantRates.value?.wifi_rate ?? wifi.value,
-    }
-    console.log('🔍 Effective rates:', rates, 'tenantRates:', tenantRates.value, 'defaultRates:', {
-      rent: rent.value,
-      water: water.value,
-      electricity: electricity.value,
-      wifi: wifi.value,
-    })
-    return rates
-  })
+  const effectiveRates = computed(() => ({
+    rent: tenantRates.value.rent_rate || rent.value || 0,
+    electricity: tenantRates.value.electricity_rate || electricity.value || 0,
+    water: tenantRates.value.water_rate || water.value || 0,
+    wifi: tenantRates.value.wifi_rate || wifi.value || 0,
+  }))
 
   const total = computed(() => {
     const sum =
@@ -193,237 +28,521 @@ export const useUtilityStore = defineStore('utility', () => {
     return sum
   })
 
-  const saveSettings = async () => {
+  async function fetchSettings() {
     try {
-      loading.value = true
-      console.log('Saving settings with the following values:', {
-        electricity_rate: electricity.value,
-        water_rate: water.value,
-        wifi_rate: wifi.value,
-        rent_rate: rent.value,
-        gcash_number: gcashNumber.value,
-      })
-
-      const { error } = await supabase
-        .from('settings')
-        .update({
-          electricity_rate: electricity.value,
-          water_rate: water.value,
-          wifi_rate: wifi.value,
-          rent_rate: rent.value,
-          gcash_number: gcashNumber.value || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', settingsId.value)
+      console.log('🔍 Fetching settings...')
+      const { data, error } = await supabase.from('settings').select('*').single()
       if (error) throw error
-      console.log('✅ Settings saved successfully!')
-      emitTotalAmountUpdated()
+      rent.value = Number(data.rent_rate) || 0
+      electricity.value = Number(data.electricity_rate) || 0
+      water.value = Number(data.water_rate) || 0
+      wifi.value = Number(data.wifi_rate) || 0
+      console.log('✅ Settings fetched:', {
+        rent: rent.value,
+        electricity: electricity.value,
+        water: water.value,
+        wifi: wifi.value,
+      })
     } catch (error) {
-      console.error('⚠️ Error saving settings:', error.message)
-      errorMessage.value = 'Failed to save settings: ' + error.message
-    } finally {
-      loading.value = false
+      console.error('⚠️ Error fetching settings:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      })
+      errorMessage.value = 'Failed to fetch settings: ' + error.message
     }
   }
 
-  const updateInvoice = async (invoiceId, totalAmount, isPaid = false) => {
+  async function fetchTenantRates(userId) {
     try {
-      if (!invoiceId) {
-        console.warn('⚠️ No invoice ID found, skipping update.')
-        errorMessage.value = 'No invoice ID provided for update.'
+      console.log('🔍 Fetching tenant rates for user:', userId)
+      const { data, error } = await supabase
+        .from('tenant_rates')
+        .select('rent_rate, electricity_rate, water_rate, wifi_rate')
+        .eq('user_id', userId)
+        .single()
+      if (error) throw error
+      tenantRates.value = {
+        rent_rate: Number(data.rent_rate) || 0,
+        electricity_rate: Number(data.electricity_rate) || 0,
+        water_rate: Number(data.water_rate) || 0,
+        wifi_rate: Number(data.wifi_rate) || 0,
+      }
+      console.log('✅ Tenant rates fetched:', tenantRates.value)
+    } catch (error) {
+      console.error('⚠️ Error fetching tenant rates:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      })
+      errorMessage.value = 'Failed to fetch tenant rates: ' + error.message
+    }
+  }
+
+  async function fetchInvoiceId() {
+    try {
+      console.log('🔍 Fetching invoice ID...')
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+      if (authError || !user || !user.id) throw new Error('No user logged in or invalid user ID')
+      console.log('✅ Auth user:', user.id)
+
+      let { data: invoiceData, error: invoiceError } = await supabase
+        .from('invoices')
+        .select('invoice_id, due_date, prepaid_balance, total_amount, outstanding_balance, arrears')
+        .eq('invoice_id', user.id)
+        .single()
+
+      if (invoiceError && invoiceError.code === 'PGRST116') {
+        console.log('🔍 No invoice found, creating new invoice...')
+        const { data: newInvoice, error: createError } = await supabase
+          .from('invoices')
+          .insert({
+            invoice_id: user.id,
+            total_amount: total.value || 0,
+            outstanding_balance: 0,
+            arrears: 0,
+            prepaid_balance: 0,
+            due_date: new Date().toISOString().split('T')[0],
+            status: 'pending',
+          })
+          .select(
+            'invoice_id, due_date, prepaid_balance, total_amount, outstanding_balance, arrears',
+          )
+          .single()
+        if (createError) throw createError
+        console.log('✅ New invoice created:', newInvoice)
+        invoiceData = newInvoice
+      } else if (invoiceError) {
+        throw invoiceError
+      }
+
+      invoiceId.value = invoiceData.invoice_id
+      console.log('✅ Invoice ID fetched or created:', invoiceId.value)
+
+      if (!invoiceId.value) {
+        throw new Error('Failed to set invoiceId: invoice_id is null or undefined')
+      }
+
+      await deductMonthlyPrepaidBalance(invoiceData)
+    } catch (error) {
+      console.error('⚠️ Error fetching invoice ID:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      })
+      errorMessage.value = 'Failed to fetch invoice: ' + error.message
+      invoiceId.value = null
+    }
+  }
+
+  async function deductMonthlyPrepaidBalance(invoiceData) {
+    try {
+      if (!invoiceData.due_date || !total.value || total.value <= 0) {
+        console.log('🔍 Skipping deduction: Invalid due_date or total', {
+          due_date: invoiceData.due_date,
+          total: total.value,
+        })
         return
       }
 
-      const { data: existingInvoice, error: fetchError } = await supabase
-        .from('invoices')
-        .select('outstanding_balance, due_date, total_amount, arrears, prepaid_balance, status')
-        .eq('invoice_id', invoiceId)
-        .single()
-      if (fetchError) throw fetchError
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const dueDate = new Date(invoiceData.due_date)
+      dueDate.setHours(0, 0, 0, 0)
 
-      const today = new Date().toISOString().slice(0, 10)
-      let newOutstandingBalance = existingInvoice.outstanding_balance
-      let newArrears = existingInvoice.arrears
-      let newPrepaidBalance = existingInvoice.prepaid_balance
-      let newDueDate = existingInvoice.due_date
-      let newStatus = existingInvoice.status
-
-      if (isPaid) {
-        newOutstandingBalance = 0
-        newArrears = 0
-        newStatus = 'paid'
-        console.log('💰 Payment received! Clearing outstanding balance and arrears.')
-      } else {
-        if (
-          existingInvoice.due_date < today &&
-          existingInvoice.status !== 'paid' &&
-          newPrepaidBalance < totalAmount
-        ) {
-          console.warn('⏳ Due date passed! Updating outstanding balance and arrears...')
-          newOutstandingBalance += totalAmount
-          newArrears += totalAmount
-          const nextMonth = new Date()
-          nextMonth.setMonth(nextMonth.getMonth() + 1)
-          newDueDate = nextMonth.toISOString().slice(0, 10)
-          newStatus = 'overdue'
-        }
-        if (newPrepaidBalance >= totalAmount) {
-          newPrepaidBalance -= totalAmount
-          newOutstandingBalance = 0
-          newArrears = 0
-          newStatus = 'paid'
-          console.log('💸 Applied prepaid balance:', newPrepaidBalance)
-        }
+      if (dueDate > today) {
+        console.log('🔍 Skipping deduction: Due date is in the future', { dueDate, today })
+        return
       }
 
-      const { error } = await supabase
+      let prepaidBalance = Number(invoiceData.prepaid_balance) || 0
+      let outstandingBalance = Number(invoiceData.outstanding_balance) || 0
+      let arrears = Number(invoiceData.arrears) || 0
+      let newDueDate = new Date(dueDate)
+
+      console.log('🔍 Checking prepaid balance deduction:', {
+        prepaidBalance,
+        total: total.value,
+        dueDate,
+        today,
+      })
+
+      if (prepaidBalance >= total.value) {
+        prepaidBalance -= total.value
+        newDueDate.setMonth(newDueDate.getMonth() + 1)
+        console.log('✅ Deducted one month:', {
+          deducted: total.value,
+          newPrepaidBalance: prepaidBalance,
+          newDueDate: newDueDate.toISOString().split('T')[0],
+        })
+      } else {
+        arrears += total.value - prepaidBalance
+        prepaidBalance = 0
+        newDueDate.setMonth(newDueDate.getMonth() + 1)
+        console.log('⚠️ Insufficient prepaid balance, added to arrears:', {
+          added: total.value - prepaidBalance,
+          newArrears: arrears,
+          newDueDate: newDueDate.toISOString().split('T')[0],
+        })
+      }
+
+      const newStatus = computeInvoiceStatus({
+        outstanding_balance: outstandingBalance,
+        arrears,
+        due_date: newDueDate.toISOString().split('T')[0],
+      })
+      console.log('✅ Calculated new status:', newStatus)
+
+      const { error: updateError } = await supabase
         .from('invoices')
         .update({
-          total_amount: totalAmount,
-          outstanding_balance: newOutstandingBalance,
-          arrears: newArrears,
-          prepaid_balance: newPrepaidBalance,
-          due_date: newDueDate,
+          prepaid_balance: prepaidBalance,
+          due_date: newDueDate.toISOString().split('T')[0],
+          outstanding_balance: outstandingBalance,
+          arrears,
           status: newStatus,
         })
-        .eq('invoice_id', invoiceId)
-      if (error) throw error
-      console.log('✅ Invoice updated:', {
-        invoiceId,
-        totalAmount,
-        outstandingBalance: newOutstandingBalance,
-        arrears: newArrears,
-        prepaidBalance: newPrepaidBalance,
-        dueDate: newDueDate,
+        .eq('invoice_id', invoiceData.invoice_id)
+
+      if (updateError) throw updateError
+
+      console.log('✅ Invoice updated after deduction:', {
+        prepaid_balance: prepaidBalance,
+        due_date: newDueDate.toISOString().split('T')[0],
+        outstanding_balance: outstandingBalance,
+        arrears,
         status: newStatus,
       })
+
+      errorMessage.value =
+        prepaidBalance >= total.value
+          ? 'Successfully deducted one month from prepaid balance'
+          : 'Insufficient prepaid balance, added to arrears'
     } catch (error) {
-      console.error('⚠️ Error updating invoice:', error.message)
-      errorMessage.value = 'Failed to update invoice: ' + error.message
+      console.error('⚠️ Error deducting prepaid balance:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      })
+      errorMessage.value = 'Failed to deduct prepaid balance: ' + error.message
     }
   }
 
-  const processPartialPayment = async (invoiceId, paymentAmount, paymentId) => {
+  async function fetchInvoiceData(invoiceId) {
     try {
       if (!invoiceId) {
-        console.warn('⚠️ No invoice ID for partial payment.')
-        errorMessage.value = 'No invoice ID provided for payment.'
-        throw new Error('No invoice ID provided.')
-      }
-      if (paymentAmount <= 0 || isNaN(paymentAmount)) {
-        errorMessage.value = 'Invalid payment amount. Must be greater than zero.'
-        throw new Error(errorMessage.value)
-      }
-      if (!paymentId) {
-        console.warn('⚠️ No payment ID for partial payment.')
-        errorMessage.value = 'No payment ID provided.'
-        throw new Error('No payment ID provided.')
+        console.error('⚠️ Invalid invoiceId:', invoiceId)
+        throw new Error('Invoice ID is null or undefined')
       }
 
-      console.log('🔄 Starting partial payment:', { invoiceId, paymentAmount, paymentId })
-
-      const { data: payment, error: paymentError } = await supabase
-        .from('payment')
-        .select('amount, status, payment_type')
-        .eq('payment_id', paymentId)
-        .eq('invoice_id', invoiceId)
-        .single()
-      if (paymentError || !payment) {
-        console.error('⚠️ Payment not found or error:', paymentError?.message)
-        errorMessage.value = 'Payment record not found.'
-        throw new Error('Payment record not found.')
-      }
-      if (payment.amount !== paymentAmount) {
-        console.warn('⚠️ Payment amount mismatch:', {
-          dbAmount: payment.amount,
-          inputAmount: paymentAmount,
-        })
-        errorMessage.value = 'Payment amount mismatch.'
-        throw new Error('Payment amount mismatch.')
-      }
-      if (payment.status === 'approved') {
-        console.warn('⚠️ Payment already processed:', { paymentId })
-        errorMessage.value = 'Payment already processed.'
-        throw new Error('Payment already processed.')
-      }
-      if (payment.payment_type !== 'partial') {
-        console.warn('⚠️ Invalid payment type for partial payment:', payment.payment_type)
-        errorMessage.value = 'Payment type must be "partial".'
-        throw new Error('Invalid payment type.')
-      }
-
-      const { data: invoice, error: fetchError } = await supabase
+      console.log('🔍 Fetching invoice data for:', invoiceId)
+      let { data, error } = await supabase
         .from('invoices')
-        .select('outstanding_balance, arrears, prepaid_balance, total_amount, status')
+        .select('total_amount, outstanding_balance, arrears, prepaid_balance, due_date, status')
         .eq('invoice_id', invoiceId)
         .single()
-      if (fetchError) {
-        console.error('⚠️ Failed to fetch invoice:', fetchError.message)
-        errorMessage.value = 'Failed to fetch invoice: ' + fetchError.message
-        throw fetchError
+
+      if (error && error.code === 'PGRST116') {
+        console.log('🔍 No invoice found for invoiceId:', invoiceId)
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser()
+        if (authError || !user || !user.id) throw new Error('No user logged in or invalid user ID')
+
+        console.log('🔍 Creating new invoice for user:', user.id)
+        const { data: newInvoice, error: createError } = await supabase
+          .from('invoices')
+          .insert({
+            invoice_id: user.id,
+            total_amount: total.value || 0,
+            outstanding_balance: 0,
+            arrears: 0,
+            prepaid_balance: 0,
+            due_date: new Date().toISOString().split('T')[0],
+            status: 'pending',
+          })
+          .select('total_amount, outstanding_balance, arrears, prepaid_balance, due_date, status')
+          .single()
+        if (createError) throw createError
+        console.log('✅ New invoice created:', newInvoice)
+        data = newInvoice
+      } else if (error) {
+        throw error
       }
 
-      console.log('📊 Current invoice:', {
-        outstanding_balance: invoice.outstanding_balance,
-        arrears: invoice.arrears,
-        prepaid_balance: invoice.prepaid_balance,
-        total_amount: invoice.total_amount,
-        status: invoice.status,
+      if (!data) {
+        throw new Error('No invoice data returned for invoiceId: ' + invoiceId)
+      }
+
+      const invoiceData = {
+        total_amount: Number(data.total_amount) || 0,
+        outstanding_balance: Number(data.outstanding_balance) || 0,
+        arrears: Number(data.arrears) || 0,
+        prepaid_balance: Number(data.prepaid_balance) || 0,
+        due_date: data.due_date,
+        status: data.status || 'pending',
+      }
+      console.log('✅ Invoice data fetched:', invoiceData)
+      return invoiceData
+    } catch (error) {
+      console.error('⚠️ Error fetching invoice data:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        invoiceId,
+      })
+      errorMessage.value = 'Failed to fetch invoice data: ' + error.message
+      return {
+        total_amount: 0,
+        outstanding_balance: 0,
+        arrears: 0,
+        prepaid_balance: 0,
+        due_date: null,
+        status: 'pending',
+      }
+    }
+  }
+
+  async function savePayment(paymentDetails) {
+    try {
+      console.log('💾 Saving payment:', paymentDetails)
+      const { invoiceId, userId, amount, paymentMethod, paymentIntentId, paymentType, months } =
+        paymentDetails
+      if (!amount || amount <= 0 || isNaN(amount)) {
+        throw new Error('Invalid payment amount')
+      }
+      const { data, error } = await supabase
+        .from('payment')
+        .insert({
+          invoice_id: invoiceId,
+          user_id: userId,
+          amount,
+          payment_method: paymentMethod,
+          payment_intent_id: paymentIntentId,
+          payment_type: paymentType || 'partial',
+          months: paymentType === 'advance' ? months : null,
+          status: 'pending',
+        })
+        .select('payment_id')
+        .single()
+      if (error) throw error
+      console.log('✅ Payment saved:', data.payment_id)
+      return data.payment_id
+    } catch (error) {
+      console.error('⚠️ Error saving payment:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      })
+      errorMessage.value = 'Failed to save payment: ' + error.message
+      throw error
+    }
+  }
+
+  function computeInvoiceStatus({ outstanding_balance, arrears, due_date }) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dueDate = new Date(due_date)
+    dueDate.setHours(0, 0, 0, 0)
+
+    if (outstanding_balance > 0 || arrears > 0) {
+      return dueDate < today ? 'overdue' : 'pending'
+    }
+    return dueDate <= today ? 'pending' : 'paid'
+  }
+
+  async function processAdvancePayment(invoiceId, months, amount, paymentId) {
+    try {
+      console.log('💸 Processing advance payment:', { invoiceId, months, amount, paymentId })
+
+      if (!Number.isInteger(months) || months <= 0) {
+        throw new Error('Invalid months: Must be a positive integer')
+      }
+      if (!amount || amount <= 0 || isNaN(amount)) {
+        throw new Error('Invalid amount: Must be a positive number')
+      }
+
+      const { data: invoiceData, error: fetchError } = await supabase
+        .from('invoices')
+        .select('prepaid_balance, arrears, outstanding_balance, due_date')
+        .eq('invoice_id', invoiceId)
+        .single()
+
+      if (fetchError) throw fetchError
+      if (!invoiceData) throw new Error('Invoice not found')
+
+      console.log('✅ Current invoice state:', {
+        prepaid_balance: invoiceData.prepaid_balance,
+        arrears: invoiceData.arrears,
+        outstanding_balance: invoiceData.outstanding_balance,
+        due_date: invoiceData.due_date,
       })
 
-      let newOutstandingBalance = invoice.outstanding_balance
-      let newArrears = invoice.arrears
-      let newPrepaidBalance = invoice.prepaid_balance || 0
-      let remainingPayment = Number(paymentAmount)
-      let newStatus = invoice.status
+      let remainingPayment = amount
+      let newArrears = Number(invoiceData.arrears) || 0
+      let newOutstandingBalance = Number(invoiceData.outstanding_balance) || 0
 
-      console.log('🔍 Applying to outstanding_balance:', {
-        remainingPayment,
-        newOutstandingBalance,
-      })
-      if (remainingPayment >= newOutstandingBalance) {
-        remainingPayment -= newOutstandingBalance
+      // Clear arrears
+      if (newArrears > 0) {
+        const amountToClear = Math.min(remainingPayment, newArrears)
+        newArrears -= amountToClear
+        remainingPayment -= amountToClear
+        console.log('✅ Cleared arrears:', { amountToClear, newArrears, remainingPayment })
+      }
+
+      // Apply payment to outstanding_balance
+      if (remainingPayment > 0 && newOutstandingBalance > 0) {
+        const amountToClear = Math.min(remainingPayment, newOutstandingBalance)
+        newOutstandingBalance -= amountToClear
+        remainingPayment -= amountToClear
+        console.log('✅ Cleared outstanding balance:', {
+          amountToClear,
+          newOutstandingBalance,
+          remainingPayment,
+        })
+      }
+
+      // Move remaining outstanding_balance to arrears
+      if (newOutstandingBalance > 0) {
+        newArrears += newOutstandingBalance
+        console.log('✅ Moved remaining outstanding to arrears:', {
+          moved: newOutstandingBalance,
+          newArrears,
+        })
         newOutstandingBalance = 0
-        console.log('✅ Cleared outstanding_balance. Remaining:', remainingPayment)
-      } else {
-        newOutstandingBalance -= remainingPayment
-        remainingPayment = 0
-        console.log('✅ Reduced outstanding_balance to:', newOutstandingBalance)
       }
 
-      if (remainingPayment > 0 && newArrears > 0) {
-        console.log('🔍 Applying to arrears:', { remainingPayment, newArrears })
-        if (remainingPayment >= newArrears) {
-          remainingPayment -= newArrears
-          newArrears = 0
-          console.log('✅ Cleared arrears. Remaining:', remainingPayment)
-        } else {
-          newArrears -= remainingPayment
-          remainingPayment = 0
-          console.log('✅ Reduced arrears to:', newArrears)
-        }
+      // Add remaining payment to prepaid_balance
+      const newPrepaidBalance = (Number(invoiceData.prepaid_balance) || 0) + remainingPayment
+      console.log('✅ Calculated prepaid_balance:', { newPrepaidBalance, remainingPayment })
+
+      // Calculate new due_date
+      let currentDueDate = invoiceData.due_date ? new Date(invoiceData.due_date) : new Date()
+      if (isNaN(currentDueDate.getTime())) {
+        console.warn('⚠️ Invalid current due_date, using today:', invoiceData.due_date)
+        currentDueDate = new Date()
+      }
+      const newDueDate = new Date(currentDueDate)
+      newDueDate.setMonth(currentDueDate.getMonth() + months)
+      if (isNaN(newDueDate.getTime())) {
+        throw new Error('Invalid new due_date calculated')
       }
 
-      if (remainingPayment > 0) {
-        newPrepaidBalance += remainingPayment
-        console.log('💸 Added to prepaid_balance:', { added: remainingPayment, newPrepaidBalance })
-      } else {
-        console.log('✅ No excess payment. Prepaid_balance unchanged:', newPrepaidBalance)
-      }
+      console.log('✅ Calculated new due_date:', {
+        currentDueDate: currentDueDate.toISOString().split('T')[0],
+        months,
+        newDueDate: newDueDate.toISOString().split('T')[0],
+      })
 
-      if (newOutstandingBalance === 0 && invoice.total_amount <= paymentAmount) {
-        newStatus = 'paid'
-      } else {
-        newStatus = 'pending'
-      }
-
-      console.log('📊 New invoice state:', {
-        outstandingBalance: newOutstandingBalance,
+      // Compute new status
+      const newStatus = computeInvoiceStatus({
+        outstanding_balance: newOutstandingBalance,
         arrears: newArrears,
-        prepaidBalance: newPrepaidBalance,
+        due_date: newDueDate.toISOString().split('T')[0],
+      })
+      console.log('✅ Calculated new status:', newStatus)
+
+      // Update invoice
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({
+          prepaid_balance: newPrepaidBalance,
+          arrears: newArrears,
+          outstanding_balance: newOutstandingBalance,
+          due_date: newDueDate.toISOString().split('T')[0],
+          status: newStatus,
+        })
+        .eq('invoice_id', invoiceId)
+
+      if (updateError) throw updateError
+
+      console.log('✅ Invoice updated:', {
+        prepaid_balance: newPrepaidBalance,
+        arrears: newArrears,
+        outstanding_balance: newOutstandingBalance,
+        due_date: newDueDate.toISOString().split('T')[0],
         status: newStatus,
       })
 
+      errorMessage.value = 'Payment successful, waiting for admin approval/check'
+      return newPrepaidBalance
+    } catch (error) {
+      console.error('⚠️ Error processing advance payment:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      })
+      errorMessage.value = 'Failed to process advance payment: ' + error.message
+      throw error
+    }
+  }
+
+  async function processPartialPayment(invoiceId, amount, paymentId) {
+    try {
+      console.log('💸 Processing partial payment:', { invoiceId, amount, paymentId })
+      const { data: invoiceData, error: fetchError } = await supabase
+        .from('invoices')
+        .select('outstanding_balance, arrears, prepaid_balance, due_date')
+        .eq('invoice_id', invoiceId)
+        .single()
+
+      if (fetchError) throw fetchError
+      if (!invoiceData) throw new Error('Invoice not found')
+
+      let remainingPayment = amount
+      let newArrears = Number(invoiceData.arrears) || 0
+      let newOutstandingBalance = Number(invoiceData.outstanding_balance) || 0
+      let newPrepaidBalance = Number(invoiceData.prepaid_balance) || 0
+
+      // Clear arrears
+      if (newArrears > 0) {
+        const amountToClear = Math.min(remainingPayment, newArrears)
+        newArrears -= amountToClear
+        remainingPayment -= amountToClear
+        console.log('✅ Cleared arrears:', { amountToClear, newArrears, remainingPayment })
+      }
+
+      // Apply payment to outstanding_balance
+      if (remainingPayment > 0 && newOutstandingBalance > 0) {
+        const amountToClear = Math.min(remainingPayment, newOutstandingBalance)
+        newOutstandingBalance -= amountToClear
+        remainingPayment -= amountToClear
+        console.log('✅ Cleared outstanding balance:', {
+          amountToClear,
+          newOutstandingBalance,
+          remainingPayment,
+        })
+      }
+
+      // Move remaining outstanding_balance to arrears
+      if (newOutstandingBalance > 0) {
+        newArrears += newOutstandingBalance
+        console.log('✅ Moved remaining outstanding to arrears:', {
+          moved: newOutstandingBalance,
+          newArrears,
+        })
+        newOutstandingBalance = 0
+      }
+
+      // Add remaining payment to prepaid_balance
+      if (remainingPayment > 0) {
+        newPrepaidBalance += remainingPayment
+        console.log('✅ Added to prepaid balance:', { remainingPayment, newPrepaidBalance })
+      }
+
+      // Compute new status
+      const newStatus = computeInvoiceStatus({
+        outstanding_balance: newOutstandingBalance,
+        arrears: newArrears,
+        due_date: invoiceData.due_date,
+      })
+      console.log('✅ Calculated new status:', newStatus)
+
+      // Update invoice
       const { error: updateError } = await supabase
         .from('invoices')
         .update({
@@ -431,318 +550,48 @@ export const useUtilityStore = defineStore('utility', () => {
           arrears: newArrears,
           prepaid_balance: newPrepaidBalance,
           status: newStatus,
-          updated_at: new Date().toISOString(),
         })
         .eq('invoice_id', invoiceId)
-      if (updateError) {
-        console.error('⚠️ Failed to update invoice:', updateError.message)
-        errorMessage.value = 'Failed to update invoice: ' + updateError.message
-        throw updateError
-      }
 
-      console.log('✅ Partial payment processed:', {
-        invoiceId,
-        paymentAmount,
-        paymentId,
-        outstandingBalance: newOutstandingBalance,
+      if (updateError) throw updateError
+
+      console.log('✅ Invoice updated:', {
+        outstanding_balance: newOutstandingBalance,
         arrears: newArrears,
-        prepaidBalance: newPrepaidBalance,
+        prepaid_balance: newPrepaidBalance,
         status: newStatus,
       })
 
-      const event = new CustomEvent('payment-processed', {
-        detail: { invoiceId, outstandingBalance: newOutstandingBalance },
-      })
-      window.dispatchEvent(event)
-
-      return newOutstandingBalance
+      errorMessage.value = 'Payment successful, waiting for admin approval/check'
+      return newPrepaidBalance
     } catch (error) {
-      console.error('⚠️ Error processing partial payment:', error.message)
+      console.error('⚠️ Error processing partial payment:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      })
       errorMessage.value = 'Failed to process partial payment: ' + error.message
       throw error
     }
   }
 
-  const processAdvancePayment = async (invoiceId, months, paymentAmount, paymentId) => {
-    try {
-      if (!invoiceId || !paymentId) {
-        errorMessage.value = 'Missing invoice or payment ID.'
-        throw new Error('Missing invoice or payment ID.')
-      }
-      if (!months || months < 1) {
-        errorMessage.value = 'Months must be at least 1.'
-        throw new Error('Invalid months.')
-      }
-
-      console.log('🔄 Processing advance payment:', { invoiceId, months, paymentAmount, paymentId })
-
-      const { data: payment, error: paymentError } = await supabase
-        .from('payment')
-        .select('amount, status, payment_type, months')
-        .eq('payment_id', paymentId)
-        .eq('invoice_id', invoiceId)
-        .single()
-      if (paymentError || !payment) {
-        console.error('⚠️ Payment not found:', paymentError?.message)
-        errorMessage.value = 'Payment record not found.'
-        throw new Error('Payment record not found.')
-      }
-      if (payment.status === 'approved') {
-        console.warn('⚠️ Payment already processed:', { paymentId })
-        errorMessage.value = 'Payment already processed.'
-        throw new Error('Payment already processed.')
-      }
-      if (payment.amount !== paymentAmount) {
-        console.error('⚠️ Payment amount mismatch:', {
-          dbAmount: payment.amount,
-          inputAmount: paymentAmount,
-        })
-        errorMessage.value = `Payment amount mismatch. Expected: ${paymentAmount}, Found: ${payment.amount}`
-        throw new Error(errorMessage.value)
-      }
-      if (payment.payment_type !== 'advance') {
-        console.error('⚠️ Invalid payment type:', {
-          expected: 'advance',
-          found: payment.payment_type,
-        })
-        errorMessage.value = `Invalid payment type. Expected: advance, Found: ${payment.payment_type}`
-        throw new Error(errorMessage.value)
-      }
-      if (payment.months !== months) {
-        console.warn('⚠️ Months mismatch:', {
-          dbMonths: payment.months,
-          inputMonths: months,
-        })
-        months = payment.months
-      }
-
-      const totalPerMonth = total.value
-      const totalAdvance = totalPerMonth * months
-      if (paymentAmount < totalAdvance) {
-        console.error('⚠️ Insufficient payment amount:', {
-          paymentAmount,
-          required: totalAdvance,
-        })
-        errorMessage.value = `Payment amount (${paymentAmount}) is less than required for ${months} months (${totalAdvance}).`
-        throw new Error(errorMessage.value)
-      }
-
-      const { data: invoice, error: fetchError } = await supabase
-        .from('invoices')
-        .select('outstanding_balance, arrears, prepaid_balance, due_date, total_amount')
-        .eq('invoice_id', invoiceId)
-        .single()
-      if (fetchError) {
-        console.error('⚠️ Failed to fetch invoice:', fetchError.message)
-        errorMessage.value = 'Failed to fetch invoice: ' + fetchError.message
-        throw fetchError
-      }
-
-      console.log('📊 Current invoice:', {
-        invoice_id: invoiceId,
-        outstanding_balance: invoice.outstanding_balance,
-        arrears: invoice.arrears,
-        prepaid_balance: invoice.prepaid_balance,
-        total_amount: invoice.total_amount,
-        due_date: invoice.due_date,
-      })
-
-      let newOutstandingBalance = invoice.outstanding_balance
-      let newArrears = invoice.arrears
-      let newPrepaidBalance = invoice.prepaid_balance || 0
-      let remainingPayment = Number(paymentAmount)
-
-      if (remainingPayment >= newOutstandingBalance) {
-        remainingPayment -= newOutstandingBalance
-        newOutstandingBalance = 0
-        console.log('✅ Cleared outstanding_balance. Remaining:', remainingPayment)
-      } else {
-        newOutstandingBalance -= remainingPayment
-        remainingPayment = 0
-        console.log('✅ Reduced outstanding_balance to:', newOutstandingBalance)
-      }
-
-      if (remainingPayment > 0 && newArrears > 0) {
-        if (remainingPayment >= newArrears) {
-          remainingPayment -= newArrears
-          newArrears = 0
-          console.log('✅ Cleared arrears. Remaining:', remainingPayment)
-        } else {
-          newArrears -= remainingPayment
-          remainingPayment = 0
-          console.log('✅ Reduced arrears to:', newArrears)
-        }
-      }
-
-      if (remainingPayment > 0) {
-        newPrepaidBalance += remainingPayment
-        console.log('💸 Added to prepaid_balance:', { added: remainingPayment, newPrepaidBalance })
-      } else {
-        console.log('✅ No excess payment. Prepaid_balance unchanged:', newPrepaidBalance)
-      }
-
-      const dueDate = new Date(invoice.due_date)
-      dueDate.setMonth(dueDate.getMonth() + months)
-      const newDueDate = dueDate.toISOString().slice(0, 10)
-
-      const { data: updatedInvoice, error: updateError } = await supabase
-        .from('invoices')
-        .update({
-          outstanding_balance: newOutstandingBalance,
-          arrears: newArrears,
-          prepaid_balance: newPrepaidBalance,
-          due_date: newDueDate,
-          status: newOutstandingBalance > 0 ? 'pending' : 'paid',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('invoice_id', invoiceId)
-        .select()
-        .single()
-      if (updateError) {
-        console.error('⚠️ Failed to update invoice:', {
-          message: updateError.message,
-          details: updateError.details,
-          hint: updateError.hint,
-          code: updateError.code,
-        })
-        errorMessage.value = `Failed to update invoice: ${updateError.message}`
-        throw updateError
-      }
-
-      console.log('✅ Advance payment processed:', {
-        invoiceId,
-        months,
-        paymentAmount,
-        outstandingBalance: newOutstandingBalance,
-        arrears: newArrears,
-        prepaidBalance: newPrepaidBalance,
-        dueDate: newDueDate,
-        updatedInvoice,
-      })
-
-      const event = new CustomEvent('payment-processed', {
-        detail: { invoiceId, outstandingBalance: newOutstandingBalance },
-      })
-      window.dispatchEvent(event)
-
-      return newOutstandingBalance
-    } catch (error) {
-      console.error('⚠️ Error processing advance payment:', {
-        message: error.message,
-        stack: error.stack,
-      })
-      errorMessage.value = 'Failed to process advance payment: ' + error.message
-      throw error
-    }
-  }
-
-  const emitTotalAmountUpdated = () => {
-    const event = new CustomEvent('total-amount-updated', {
-      detail: total.value,
-    })
-    window.dispatchEvent(event)
-  }
-
-  const resetDefaults = () => {
-    electricity.value = 1200
-    water.value = 800
-    wifi.value = 1000
-    rent.value = 2500
-    saveSettings()
-  }
-
-  const fetchInvoiceId = async () => {
-    try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser()
-      if (error || !user) throw new Error('No user is currently logged in.')
-
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('invoice_id, role')
-        .eq('user_id', user.id)
-        .single()
-      if (userError) throw userError
-
-      if (userData?.role === 'admin') {
-        console.log('🛑 Admin detected. No invoice assigned.')
-        invoiceId.value = null
-        return
-      }
-
-      if (!userData?.invoice_id) {
-        const today = new Date()
-        const nextMonth = new Date(today.setMonth(today.getMonth() + 1)).toISOString().slice(0, 10)
-
-        const { data: newInvoice, error: createError } = await supabase
-          .from('invoices')
-          .insert([
-            {
-              total_amount: 0,
-              outstanding_balance: 0,
-              arrears: 0,
-              prepaid_balance: 0,
-              due_date: nextMonth,
-              status: 'pending',
-            },
-          ])
-          .select('invoice_id')
-          .single()
-        if (createError) throw createError
-
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ invoice_id: newInvoice.invoice_id })
-          .eq('user_id', user.id)
-        if (updateError) throw updateError
-
-        invoiceId.value = newInvoice.invoice_id
-        console.log('✅ New Invoice ID created with due date:', nextMonth)
-      } else {
-        invoiceId.value = userData.invoice_id
-        console.log('✅ Fetched Invoice ID:', invoiceId.value)
-      }
-    } catch (error) {
-      console.error('⚠️ Error fetching or creating invoice ID:', error.message)
-      errorMessage.value = 'Failed to fetch or create invoice ID: ' + error.message
-    }
-  }
-
-  watch(
-    [electricity, water, wifi, rent],
-    debounce(() => {
-      if (invoiceId.value) {
-        console.log('🔄 Updating invoice with total:', total.value)
-        updateInvoice(invoiceId.value, total.value)
-      }
-    }, 1000),
-  )
-
-  fetchInvoiceId()
-
   return {
+    rent,
     electricity,
     water,
     wifi,
-    rent,
-    gcashNumber,
-    total,
-    loading,
-    errorMessage,
-    settingsId,
     tenantRates,
-    fetchSettings,
-    saveSettings,
-    updateInvoice,
-    processPartialPayment,
-    processAdvancePayment,
-    savePayment,
-    resetDefaults,
-    fetchTenantRates,
     effectiveRates,
+    total,
     invoiceId,
+    errorMessage,
+    fetchSettings,
+    fetchTenantRates,
+    fetchInvoiceId,
+    deductMonthlyPrepaidBalance,
     fetchInvoiceData,
+    savePayment,
+    processAdvancePayment,
+    processPartialPayment,
   }
 })

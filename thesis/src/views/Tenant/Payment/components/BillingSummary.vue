@@ -13,6 +13,9 @@ const props = defineProps({
 
 const store = useUtilityStore()
 const outstandingBalance = ref(0)
+const arrears = ref(0)
+const prepaidBalance = ref(0)
+const totalPayments = ref(0)
 const currentTotal = ref(0)
 const grandTotal = ref(0)
 const isLoading = ref(false)
@@ -30,59 +33,56 @@ const fetchData = async () => {
     if (!user) throw new Error('No user is currently logged in.')
     console.log('BillingSummary - Auth User ID:', user.id)
 
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('invoice_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (userError) throw userError
-
-    if (!userData.invoice_id) {
-      console.warn('BillingSummary - No invoice found. Creating one...')
-      const { data: newInvoice, error: createError } = await supabase
-        .from('invoices')
-        .insert([
-          {
-            total_amount: 0,
-            outstanding_balance: 0,
-            due_date: new Date().toISOString().slice(0, 10),
-            status: 'Pending',
-          },
-        ])
-        .select('invoice_id')
-        .single()
-
-      if (createError) throw createError
-
-      console.log('BillingSummary - New Invoice Created:', newInvoice.invoice_id)
-
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ invoice_id: newInvoice.invoice_id })
-        .eq('user_id', user.id)
-
-      if (updateError) throw updateError
-
-      console.log('BillingSummary - User invoice_id updated:', newInvoice.invoice_id)
-      userData.invoice_id = newInvoice.invoice_id
+    // Fetch or create invoice_id via store
+    await store.fetchInvoiceId()
+    if (!store.invoiceId) {
+      throw new Error('No invoice assigned for user.')
     }
+    console.log('BillingSummary - Invoice ID:', store.invoiceId)
 
+    // Fetch invoice data
     const { data: invoiceData, error: invoiceError } = await supabase
       .from('invoices')
-      .select('outstanding_balance')
-      .eq('invoice_id', userData.invoice_id)
+      .select('outstanding_balance, arrears, prepaid_balance')
+      .eq('invoice_id', store.invoiceId)
       .single()
 
     if (invoiceError) throw invoiceError
-    outstandingBalance.value = invoiceData?.outstanding_balance || 0
-    console.log('BillingSummary - Outstanding Balance:', outstandingBalance.value)
+    outstandingBalance.value = Number(invoiceData?.outstanding_balance) || 0
+    arrears.value = Number(invoiceData?.arrears) || 0
+    prepaidBalance.value = Number(invoiceData?.prepaid_balance) || 0
+    console.log('BillingSummary - Invoice Data:', {
+      outstandingBalance: outstandingBalance.value,
+      arrears: arrears.value,
+      prepaidBalance: prepaidBalance.value,
+    })
 
+    // Fetch total payments
+    const { data: paymentData, error: paymentError } = await supabase
+      .from('payment')
+      .select('amount')
+      .eq('invoice_id', store.invoiceId)
+      .eq('status', 'approved')
+
+    if (paymentError) throw paymentError
+    totalPayments.value = paymentData.reduce((sum, payment) => sum + Number(payment.amount), 0) || 0
+    console.log('BillingSummary - Total Payments:', totalPayments.value)
+
+    // Ensure settings and tenant rates are fetched
     await store.fetchSettings()
-    console.log('BillingSummary - Fetching tenant rates for user_id:', user.id)
+    console.log('BillingSummary - Settings:', {
+      rent: store.rent,
+      electricity: store.electricity,
+      water: store.water,
+      wifi: store.wifi,
+    })
     await store.fetchTenantRates(user.id)
+    console.log('BillingSummary - Tenant Rates:', store.tenantRates)
+    console.log('BillingSummary - Effective Rates:', store.effectiveRates)
+    console.log('BillingSummary - Store Total:', store.total)
 
-    currentTotal.value = store.total
+    // Set currentTotal after ensuring store.total is computed
+    currentTotal.value = store.total || 0
     grandTotal.value = currentTotal.value + outstandingBalance.value
     console.log('BillingSummary - Current Total:', currentTotal.value)
     console.log('BillingSummary - Grand Total:', grandTotal.value)
@@ -90,20 +90,21 @@ const fetchData = async () => {
     emit('update-total', {
       currentTotal: currentTotal.value,
       grandTotal: grandTotal.value,
+      prepaidBalance: prepaidBalance.value,
+      arrears: arrears.value,
+      totalPayments: totalPayments.value,
     })
   } catch (error) {
     console.error('BillingSummary - Error fetching data:', error.message)
     toast.error('Failed to load bill summary: ' + error.message)
   } finally {
     isLoading.value = false
-    if (store.errorMessage) {
-      toast.error(store.errorMessage)
-    }
   }
 }
 
 onMounted(fetchData)
 
+// Watch refreshKey to trigger fetchData
 watch(
   () => props.refreshKey,
   () => {
@@ -112,17 +113,38 @@ watch(
   },
 )
 
-watch([store.total, outstandingBalance], () => {
-  currentTotal.value = store.total
-  grandTotal.value = currentTotal.value + outstandingBalance.value
-  console.log('BillingSummary - Updated Current Total:', currentTotal.value)
-  console.log('BillingSummary - Updated Grand Total:', grandTotal.value)
+// Watch store totals and invoice data
+watch(
+  [store.total, store.invoiceId, outstandingBalance, arrears, prepaidBalance, totalPayments],
+  () => {
+    currentTotal.value = store.total || 0
+    grandTotal.value = currentTotal.value + outstandingBalance.value
+    console.log('BillingSummary - Updated Current Total:', currentTotal.value)
+    console.log('BillingSummary - Updated Grand Total:', grandTotal.value)
 
-  emit('update-total', {
-    currentTotal: currentTotal.value,
-    grandTotal: grandTotal.value,
-  })
-})
+    emit('update-total', {
+      currentTotal: currentTotal.value,
+      grandTotal: grandTotal.value,
+      prepaidBalance: prepaidBalance.value,
+      arrears: arrears.value,
+      totalPayments: totalPayments.value,
+    })
+  },
+)
+
+// Watch store.errorMessage for success and error messages
+watch(
+  () => store.errorMessage,
+  (newMessage) => {
+    if (newMessage) {
+      if (newMessage.includes('Payment successful')) {
+        toast.success(newMessage)
+      } else {
+        toast.error(newMessage)
+      }
+    }
+  },
+)
 </script>
 
 <template>
@@ -192,6 +214,33 @@ watch([store.total, outstandingBalance], () => {
             ₱{{ outstandingBalance.toLocaleString() }}
           </v-list-item-subtitle>
         </v-list-item>
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon color="orange">mdi-alert</v-icon>
+          </template>
+          <v-list-item-title>Total Arrears</v-list-item-title>
+          <v-list-item-subtitle class="font-weight-bold text-orange">
+            ₱{{ arrears.toLocaleString() }}
+          </v-list-item-subtitle>
+        </v-list-item>
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon color="green">mdi-cash-check</v-icon>
+          </template>
+          <v-list-item-title>Prepaid Balance</v-list-item-title>
+          <v-list-item-subtitle class="font-weight-bold text-green">
+            ₱{{ prepaidBalance.toLocaleString() }}
+          </v-list-item-subtitle>
+        </v-list-item>
+        <v-list-item v-if="arrears > 0">
+          <template v-slot:prepend>
+            <v-icon color="blue">mdi-cash-multiple</v-icon>
+          </template>
+          <v-list-item-title>Total Payments</v-list-item-title>
+          <v-list-item-subtitle class="font-weight-bold text-blue">
+            ₱{{ totalPayments.toLocaleString() }}
+          </v-list-item-subtitle>
+        </v-list-item>
         <v-divider class="my-2"></v-divider>
         <v-list-item>
           <template v-slot:prepend>
@@ -220,4 +269,14 @@ watch([store.total, outstandingBalance], () => {
 .text-primary {
   color: #578e7e;
 }
+.text-orange {
+  color: #f57c00;
+}
+.text-green {
+  color: #388e3c;
+}
+.text-blue {
+  color: #1976d2;
+}
 </style>
+```

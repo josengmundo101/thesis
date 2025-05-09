@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, onErrorCaptured } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onErrorCaptured, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useUtilityStore } from '@/stores/useUtilityStore'
 import { useToast } from 'vue-toastification'
@@ -11,6 +11,9 @@ const store = useUtilityStore()
 const toast = useToast()
 const currentTotal = ref(0)
 const grandTotal = ref(0)
+const prepaidBalance = ref(0)
+const arrears = ref(0)
+const totalPayments = ref(0)
 const userId = ref(null)
 const invoiceId = ref(null)
 const paymentIntentId = ref(null)
@@ -21,53 +24,49 @@ const months = ref(1)
 const paymentMethodType = ref('gcash')
 const totalAmount = computed(() => store.total * months.value)
 const processedIntents = ref([])
+const isLoading = ref(true)
 
-// Compute minimum months to meet PayMongo's ₱10.00 minimum
+onErrorCaptured((err, instance, info) => {
+  console.error('🛑 TenantPayment Error:', { err, instance, info })
+  toast.error('An error occurred: ' + err.message)
+  return false // Prevent error propagation
+})
+
 const minMonths = computed(() => {
   const total = store.total || 0
   if (total <= 0) {
     console.warn('⚠️ Invalid store.total:', total)
     return 1
   }
-  const min = Math.ceil(10 / total) // e.g., store.total = 5 → minMonths = 2
+  const min = Math.ceil(10 / total)
   console.log('🔍 Calculated minMonths:', min, 'for store.total:', total)
   return min
 })
 
-onErrorCaptured((err) => {
-  console.error('🛑 Component Error:', err)
-  toast.error('An error occurred: ' + err.message)
-  return false
-})
-
 const fetchOutstandingBalance = async () => {
   try {
-    if (!invoiceId.value) {
+    if (!store.invoiceId) {
       console.warn('⚠️ Skipping fetchOutstandingBalance: invoice_id is null')
       return
     }
 
-    console.log('🔍 Fetching outstanding balance for invoice:', invoiceId.value)
+    console.log('🔍 Fetching outstanding balance for invoice:', store.invoiceId)
 
-    const invoiceData = await store.fetchInvoiceData(invoiceId.value)
+    const invoiceData = await store.fetchInvoiceData(store.invoiceId)
     if (!invoiceData) throw new Error('No invoice data returned')
 
     grandTotal.value = invoiceData.outstanding_balance
     currentTotal.value = store.total
+    prepaidBalance.value = invoiceData.prepaid_balance
+    arrears.value = invoiceData.arrears
     refreshBillingSummary.value++
-
-    console.log(
-      '✅ Updated grandTotal:',
-      grandTotal.value,
-      'currentTotal:',
-      currentTotal.value,
-      'store.total:',
-      store.total,
-      'prepaid_balance:',
-      invoiceData.prepaid_balance,
-      'arrears:',
-      invoiceData.arrears,
-    )
+    console.log('✅ fetchOutstandingBalance updated:', {
+      grandTotal: grandTotal.value,
+      currentTotal: currentTotal.value,
+      prepaidBalance: prepaidBalance.value,
+      arrears: arrears.value,
+      storeTotal: store.total,
+    })
   } catch (error) {
     console.error('⚠️ Error fetching outstanding balance:', error.message)
     toast.error('Failed to fetch balance: ' + error.message)
@@ -75,71 +74,48 @@ const fetchOutstandingBalance = async () => {
 }
 
 const fetchUserData = async () => {
+  isLoading.value = true
   try {
+    console.log('🔍 TenantPayment - Fetching user data')
     const { data: authData, error: authError } = await supabase.auth.getUser()
     if (authError || !authData?.user) {
       console.warn('⚠️ No user logged in:', authError?.message || 'No user')
+      toast.error('Please log in to continue')
       window.location.href = '/login'
       return
     }
 
     userId.value = authData.user.id
+    console.log('✅ TenantPayment - User ID:', userId.value)
 
-    let { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('invoice_id')
-      .eq('user_id', userId.value)
-      .single()
+    await store.fetchInvoiceId()
+    invoiceId.value = store.invoiceId
+    console.log('✅ TenantPayment - Invoice ID:', store.invoiceId)
 
-    if (userError) throw userError
-
-    if (!userData?.invoice_id) {
-      console.log('🟡 No invoice found. Creating new invoice...')
-      const today = new Date()
-      const nextMonth = new Date(today.setMonth(today.getMonth() + 1)).toISOString().slice(0, 10)
-
-      const { data: newInvoice, error: createError } = await supabase
-        .from('invoices')
-        .insert([
-          {
-            total_amount: 0,
-            outstanding_balance: 0,
-            arrears: 0,
-            prepaid_balance: 0,
-            due_date: nextMonth,
-            status: 'pending',
-          },
-        ])
-        .select('invoice_id')
-        .single()
-
-      if (createError) throw createError
-
-      invoiceId.value = newInvoice.invoice_id
-      console.log('✅ New invoice created:', invoiceId.value)
-
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ invoice_id: invoiceId.value })
-        .eq('user_id', userId.value)
-
-      if (updateError) throw updateError
-    } else {
-      invoiceId.value = userData.invoice_id
-      console.log('✅ Existing invoice found:', invoiceId.value)
+    if (!store.invoiceId) {
+      console.warn('⚠️ No invoice assigned for user')
+      toast.error('No invoice assigned. Please contact support.')
+      return
     }
 
-    await fetchOutstandingBalance()
     await store.fetchSettings()
     await store.fetchTenantRates(userId.value)
+    console.log('🔍 TenantPayment - store.total after fetchTenantRates:', store.total)
+    if (!store.total || store.total <= 0) {
+      console.error('⚠️ Invalid store.total after fetchTenantRates:', store.total)
+      toast.error('Failed to load billing rates. Please contact support.')
+    }
+    await fetchOutstandingBalance()
   } catch (error) {
-    console.error('⚠️ Error fetching user data:', error.message)
+    console.error('⚠️ TenantPayment - Error fetching user data:', error.message)
     toast.error('Failed to load user data: ' + error.message)
+  } finally {
+    isLoading.value = false
   }
 }
 
 const openConfirmationDialog = () => {
-  if (!invoiceId.value) {
+  if (!store.invoiceId) {
     toast.error('No invoice assigned. Please try again.')
     return
   }
@@ -147,52 +123,55 @@ const openConfirmationDialog = () => {
 }
 
 const openAdvanceDialog = () => {
-  if (!invoiceId.value) {
+  if (!store.invoiceId) {
     toast.error('No invoice assigned. Please try again.')
     return
   }
   if (!store.total || store.total <= 0) {
-    toast.error('Invalid invoice total. Please contact support.')
+    console.error('⚠️ Invalid store.total for advance payment:', store.total)
+    toast.error('Invalid billing total. Please contact support.')
     return
   }
-  months.value = minMonths.value // Initialize with minimum months
+  months.value = minMonths.value
   showAdvanceDialog.value = true
 }
 
 const handleConfirmPayment = async (paymentData) => {
   try {
-    const { amount, paymentMethodType } = paymentData
-    const amountInCentavos = Math.round(Number(amount) * 100)
-    if (!amountInCentavos || amountInCentavos < 1000) {
-      toast.error('Invalid payment amount. Minimum is ₱10.00.')
+    const { amount, paymentMethodType: method } = paymentData
+    const parsedAmount = Number(amount)
+    if (!parsedAmount || parsedAmount <= 0 || isNaN(parsedAmount)) {
+      console.error('⚠️ Invalid payment amount:', amount)
+      toast.error('Payment amount must be a positive number.')
       return
     }
-    if (!['gcash', 'paymaya'].includes(paymentMethodType)) {
-      toast.error('Invalid payment method. Please select GCash or PayMaya.')
+    const amountInCentavos = Math.round(parsedAmount * 100)
+    if (amountInCentavos < 1000) {
+      toast.error('Invalid payment amount. Minimum is ₱10.00.')
       return
     }
 
     console.log(
       '💳 Initiating partial payment for invoice:',
-      invoiceId.value,
+      store.invoiceId,
       'Amount (PHP):',
-      amount,
+      parsedAmount,
       'Amount (centavos):',
       amountInCentavos,
       'Method:',
-      paymentMethodType,
+      method,
     )
 
-    const paymentIntent = await initiatePayment(amount, paymentMethodType)
+    const paymentIntent = await initiatePayment(parsedAmount, method)
     paymentIntentId.value = paymentIntent.id
 
     console.log('🔍 Payment Intent Response:', JSON.stringify(paymentIntent, null, 2))
 
     const paymentId = await store.savePayment({
-      invoiceId: invoiceId.value,
+      invoiceId: store.invoiceId,
       userId: userId.value,
-      amount: amount,
-      paymentMethod: paymentMethodType,
+      amount: parsedAmount,
+      paymentMethod: method,
       paymentIntentId: paymentIntent.id,
       paymentType: 'partial',
     })
@@ -229,10 +208,14 @@ const submitAdvancePayment = async () => {
       storeTotal: store.total,
       totalAmount: totalAmount.value,
     })
-
+    if (!store.total || store.total <= 0 || isNaN(store.total)) {
+      console.error('⚠️ Invalid store.total for advance payment:', store.total)
+      toast.error('Invalid billing total. Please contact support.')
+      return
+    }
     if (!Number.isInteger(months.value) || months.value < minMonths.value) {
       toast.error(
-        `Please enter at least ${minMonths.value} month${minMonths.value > 1 ? 's' : ''} to meet the minimum payment of ₱10.00 (store.total: ₱${store.total}).`,
+        `Please enter at least ${minMonths.value} month${minMonths.value > 1 ? 's' : ''} to meet the minimum payment of ₱10.00.`,
       )
       return
     }
@@ -241,38 +224,39 @@ const submitAdvancePayment = async () => {
       return
     }
 
-    const amountInCentavos = Math.round(Number(totalAmount.value) * 100)
-    if (!amountInCentavos || amountInCentavos < 1000) {
+    const parsedTotalAmount = Number(totalAmount.value)
+    const amountInCentavos = Math.round(parsedTotalAmount * 100)
+    if (!amountInCentavos || amountInCentavos < 1000 || isNaN(parsedTotalAmount)) {
       toast.error(
-        `Invalid advance payment amount. Minimum is ₱10.00. Current amount: ₱${(amountInCentavos / 100).toFixed(2)} (store.total: ₱${store.total})`,
+        `Invalid advance payment amount. Minimum is ₱10.00. Current amount: ₱${(amountInCentavos / 100).toFixed(2)}.`,
       )
       return
     }
 
     console.log(
       '💳 Initiating advance payment for invoice:',
-      invoiceId.value,
+      store.invoiceId,
       'Months:',
       months.value,
       'Store Total (PHP):',
       store.total,
       'Amount (PHP):',
-      totalAmount.value,
+      parsedTotalAmount,
       'Amount (centavos):',
       amountInCentavos,
       'Method:',
       paymentMethodType.value,
     )
 
-    const paymentIntent = await initiatePayment(totalAmount.value, paymentMethodType.value)
+    const paymentIntent = await initiatePayment(parsedTotalAmount, paymentMethodType.value)
     paymentIntentId.value = paymentIntent.id
 
     console.log('🔍 Payment Intent Response:', JSON.stringify(paymentIntent, null, 2))
 
     const paymentId = await store.savePayment({
-      invoiceId: invoiceId.value,
+      invoiceId: store.invoiceId,
       userId: userId.value,
-      amount: totalAmount.value,
+      amount: parsedTotalAmount,
       paymentMethod: paymentMethodType.value,
       paymentIntentId: paymentIntent.id,
       paymentType: 'advance',
@@ -314,94 +298,100 @@ const checkPaymentCallback = async () => {
       return
     }
 
-    if (paymentIntentId && !processedIntents.value.includes(paymentIntentId)) {
-      processedIntents.value.push(paymentIntentId)
-      console.log('🔍 Verifying payment for payment_intent_id:', paymentIntentId)
-
-      const paymentIntent = await verifyPaymentIntent(paymentIntentId)
-      const paymentStatus = paymentIntent.attributes.status
-
-      if (paymentStatus === 'succeeded') {
-        const { data: payment, error: paymentError } = await supabase
-          .from('payment')
-          .select('payment_id, amount, payment_type, months')
-          .eq('payment_intent_id', paymentIntentId)
-          .eq('invoice_id', invoiceId.value)
-          .single()
-
-        if (paymentError || !payment) {
-          throw new Error('Payment record not found')
-        }
-
-        let newBalance
-        if (payment.payment_type === 'advance') {
-          newBalance = await store.processAdvancePayment(
-            invoiceId.value,
-            payment.months,
-            payment.amount,
-            payment.payment_id,
-          )
-        } else {
-          newBalance = await store.processPartialPayment(
-            invoiceId.value,
-            payment.amount,
-            payment.payment_id,
-          )
-        }
-
-        const { error: paymentUpdateError } = await supabase
-          .from('payment')
-          .update({ status: 'approved' })
-          .eq('payment_intent_id', paymentIntentId)
-        if (paymentUpdateError) throw paymentUpdateError
-
-        const nextDueDate = new Date()
-        nextDueDate.setMonth(
-          nextDueDate.getMonth() + (payment.payment_type === 'advance' ? payment.months : 1),
-        )
-        const formattedNextDueDate = nextDueDate.toISOString().slice(0, 10)
-
-        const { error: invoiceUpdateError } = await supabase
-          .from('invoices')
-          .update({
-            status: newBalance > 0 ? 'pending' : 'approved',
-            due_date: formattedNextDueDate,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('invoice_id', invoiceId.value)
-        if (invoiceUpdateError) throw invoiceUpdateError
-
-        grandTotal.value = newBalance
-        refreshBillingSummary.value++
-
-        console.log('✅ Payment completed and invoice updated:', {
-          newBalance,
-          payment_type: payment.payment_type,
-        })
-        toast.success('Payment successful!')
-        await fetchOutstandingBalance()
-      } else {
-        console.error('⚠️ Payment failed or pending:', paymentStatus)
-        toast.error('Payment not completed. Please try again.')
-      }
+    if (!paymentIntentId) {
+      console.log('🔍 No payment_intent_id, skipping verification')
+      return
     }
-  } catch (err) {
-    console.error('⚠️ Error verifying payment:', {
-      message: err.message,
-      response: err.response?.data,
-      status: err.response?.status,
-      errors: err.response?.data?.errors,
+
+    if (processedIntents.value.includes(paymentIntentId)) {
+      console.log('🔍 Payment intent already processed:', paymentIntentId)
+      return
+    }
+
+    console.log('🔍 Verifying payment:', paymentIntentId)
+    processedIntents.value.push(paymentIntentId)
+
+    const paymentIntent = await verifyPaymentIntent(paymentIntentId)
+    if (paymentIntent.attributes.status !== 'succeeded') {
+      console.error('⚠️ Payment not succeeded:', paymentIntent.attributes.status)
+      toast.error('Payment not completed. Status: ' + paymentIntent.attributes.status)
+      return
+    }
+
+    const { data: payment, error: paymentError } = await supabase
+      .from('payment')
+      .select('payment_id, amount, payment_type, months')
+      .eq('payment_intent_id', paymentIntentId)
+      .eq('invoice_id', store.invoiceId)
+      .single()
+
+    if (paymentError || !payment) {
+      console.error('⚠️ Payment record not found:', paymentError?.message)
+      throw new Error('Payment record not found')
+    }
+
+    console.log('🔍 Payment record:', {
+      payment_id: payment.payment_id,
+      amount: payment.amount,
+      payment_type: payment.payment_type,
+      months: payment.months,
     })
-    const errorMessage = err.message.includes('payment_status_check')
-      ? 'Invalid payment status. Please try again or contact support.'
-      : err.response?.data?.errors?.[0]?.detail || err.message
-    toast.error(`Error verifying payment: ${errorMessage}`)
+
+    const parsedAmount = Number(payment.amount)
+    if (!parsedAmount || parsedAmount <= 0 || isNaN(parsedAmount)) {
+      console.error('⚠️ Invalid payment amount:', payment.amount)
+      toast.error('Invalid payment amount')
+      return
+    }
+
+    let newBalance
+    if (payment.payment_type === 'advance') {
+      newBalance = await store.processAdvancePayment(
+        store.invoiceId,
+        payment.months,
+        parsedAmount,
+        payment.payment_id,
+      )
+    } else {
+      newBalance = await store.processPartialPayment(
+        store.invoiceId,
+        parsedAmount,
+        payment.payment_id,
+      )
+    }
+
+    console.log('✅ Processed payment, new balance:', newBalance)
+
+    const invoiceData = await store.fetchInvoiceData(store.invoiceId)
+    console.log('✅ Final invoice state:', {
+      prepaid_balance: invoiceData.prepaid_balance,
+      outstanding_balance: invoiceData.outstanding_balance,
+      arrears: invoiceData.arrears,
+    })
+
+    // Clear URL parameters to prevent re-processing
+    window.history.replaceState({}, document.title, window.location.pathname)
+
+    await fetchOutstandingBalance()
+  } catch (err) {
+    console.error('⚠️ Error verifying payment:', err.message)
+    toast.error('Payment verification failed: ' + err.message)
   }
 }
 
 const handleTotalUpdate = (totals) => {
   currentTotal.value = totals.currentTotal
   grandTotal.value = totals.grandTotal
+  prepaidBalance.value = totals.prepaidBalance
+  arrears.value = totals.arrears
+  totalPayments.value = totals.totalPayments
+  console.log('🔍 handleTotalUpdate:', {
+    currentTotal: currentTotal.value,
+    grandTotal: grandTotal.value,
+    prepaidBalance: prepaidBalance.value,
+    arrears: arrears.value,
+    totalPayments: totalPayments.value,
+  })
 }
 
 const handlePaymentProcessed = (event) => {
@@ -411,26 +401,41 @@ const handlePaymentProcessed = (event) => {
   fetchOutstandingBalance()
 }
 
+watch(
+  () => store.errorMessage,
+  (newMessage) => {
+    if (newMessage) {
+      if (newMessage.includes('Payment successful')) {
+        toast.success(newMessage)
+      } else {
+        toast.error(newMessage)
+      }
+    }
+  },
+)
+
 onMounted(() => {
+  console.log('✅ TenantPayment - Component mounted')
   window.addEventListener('payment-processed', handlePaymentProcessed)
+  fetchUserData()
+  checkPaymentCallback()
 })
 
 onUnmounted(() => {
+  console.log('✅ TenantPayment - Component unmounted')
   window.removeEventListener('payment-processed', handlePaymentProcessed)
 })
-
-try {
-  fetchUserData()
-  checkPaymentCallback()
-} catch (error) {
-  console.error('🛑 Initialization Error:', error)
-  toast.error('Initialization failed: ' + error.message)
-}
 </script>
 
 <template>
   <v-container fluid class="py-10">
-    <v-row justify="center">
+    <v-progress-linear
+      v-if="isLoading"
+      indeterminate
+      color="primary"
+      class="mb-4"
+    ></v-progress-linear>
+    <v-row v-else justify="center">
       <v-col cols="12" md="8" class="text-center hover-scale fade-in delay-100">
         <h2 class="text-h4 font-weight-bold text-white mb-2">Make a Payment</h2>
         <p class="text-body-1 text-grey-lighten-1">
@@ -439,19 +444,30 @@ try {
       </v-col>
     </v-row>
 
-    <v-row justify="center" class="mt-6">
+    <v-row v-if="!store.invoiceId && !isLoading" justify="center">
+      <v-col cols="12" md="6">
+        <v-card>
+          <v-card-title>No Invoice Assigned</v-card-title>
+          <v-card-text>
+            <p>No invoice is assigned to your account. Please contact support.</p>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row v-if="store.invoiceId && !isLoading" justify="center" class="mt-6">
       <v-col cols="12" md="6">
         <BillingSummary :refreshKey="refreshBillingSummary" @update-total="handleTotalUpdate" />
       </v-col>
     </v-row>
 
-    <v-row justify="center" class="mt-4">
+    <v-row v-if="store.invoiceId && !isLoading" justify="center" class="mt-4">
       <v-col cols="12" md="6">
         <v-btn color="primary" block @click="openConfirmationDialog">Make Partial Payment</v-btn>
       </v-col>
     </v-row>
 
-    <v-row justify="center" class="mt-4">
+    <v-row v-if="store.invoiceId && !isLoading" justify="center" class="mt-4">
       <v-col cols="12" md="6">
         <v-btn color="secondary" block @click="openAdvanceDialog">Make Advance Payment</v-btn>
       </v-col>
