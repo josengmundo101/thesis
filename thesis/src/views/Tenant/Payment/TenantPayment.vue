@@ -657,7 +657,7 @@ onUnmounted(() => {
           @click="openConfirmationDialog"
           :disabled="isProcessingPayment"
         >
-          Make Partial Payment
+          Make Payment
         </v-btn>
       </v-col>
     </v-row>
