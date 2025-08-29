@@ -13,27 +13,44 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
 import VueApexCharts from 'vue3-apexcharts'
 
-// Data for the chart
+// Define month names for labels
+const monthNames = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+// Reactive state for chart data
 const series = ref([
   {
     name: 'Revenue',
-    data: [4000, 5000, 3000, 7000, 5000, 9000], // Revenue values per month
+    data: Array(12).fill(0), // Default values (0) for each month
   },
 ])
 
-// Chart configuration
+// Chart configuration with month names as labels
 const chartOptions = ref({
   chart: {
     type: 'area',
     toolbar: { show: false },
   },
   xaxis: {
-    categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], // Month names
+    categories: monthNames, // Use full month names
   },
-  colors: ['#81C784'], // Blue color for revenue trend
+  colors: ['#81C784'], // Green color for revenue trend
   stroke: {
     curve: 'smooth',
   },
@@ -52,10 +69,41 @@ const chartOptions = ref({
   tooltip: {
     theme: 'light',
     y: {
-      formatter: (value) => `$${value}`,
+      formatter: (value) => `₱${value.toLocaleString()}`,
     },
   },
 })
+
+// Fetch revenue data from Supabase
+const fetchRevenueData = async () => {
+  try {
+    let { data: payments, error } = await supabase
+      .from('payment')
+      .select('amount, status, payment_date')
+
+    if (error) throw error
+    if (!payments) return
+
+    // Initialize an array with 12 months filled with 0 revenue
+    const revenueData = Array(12).fill(0)
+
+    // Process payments by month
+    payments.forEach(({ amount, status, payment_date }) => {
+      if (status === 'approved') {
+        const monthIndex = new Date(payment_date).getMonth()
+        revenueData[monthIndex] += amount
+      }
+    })
+
+    // Update chart data
+    series.value[0].data = revenueData
+  } catch (error) {
+    console.error('Error fetching revenue data:', error.message)
+  }
+}
+
+// Fetch data on mount
+onMounted(fetchRevenueData)
 </script>
 
 <style scoped>

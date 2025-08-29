@@ -1,5 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
+import Vue3Toastify from 'vue3-toastify'
 // Vuetify
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
@@ -31,7 +33,14 @@ const vuetify = createVuetify({
   // main.js
 })
 
-app.use(createPinia())
+const pinia = createPinia()
+pinia.use(piniaPluginPersistedstate)
+app.use(Vue3Toastify, {
+  autoClose: 5000, // Toast auto-closes after 3 seconds
+  position: 'top-right', // Position of the toast
+  theme: 'colored', // Optional: 'light', 'dark', or 'colored'
+})
+app.use(pinia)
 app.use(router)
 app.use(vuetify)
 

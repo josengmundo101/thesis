@@ -1,13 +1,13 @@
 <script setup>
 import { ref } from 'vue'
 
-const rentAmount = ref(5000) // Default rent amount
+const rentAmount = ref(2500) // Default rent value
 </script>
 
 <template>
   <v-card class="utility-card" flat>
     <v-card-title class="d-flex align-center">
-      <v-icon color="primary" class="mr-2">mdi-home-city</v-icon>
+      <v-icon color="deep-purple" class="mr-2">mdi-home-city</v-icon>
       Rent Settings
     </v-card-title>
     <v-card-text>

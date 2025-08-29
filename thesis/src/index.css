@@ -19,6 +19,16 @@ body {
   background-color: transparent !important;
 }
 
+.v-card {
+  border-radius: 12px; /* Smooth rounded corners */
+}
+
+/* Global gradient background for the entire tenant view */
+.gradient-background {
+  background: linear-gradient(to bottom right, #578e7e, #1e3c72);
+  min-height: 100vh; /* Ensures it covers full screen */
+}
+
 /* Global Fade-In Animation */
 .fade-in {
   opacity: 0;

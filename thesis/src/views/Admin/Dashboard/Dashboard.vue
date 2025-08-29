@@ -1,3 +1,92 @@
+<script setup>
+import { ref, onMounted } from 'vue'
+import { supabase } from '@/utils/supabase'
+import StatCard from './components/StatCard.vue'
+import PendingConfirmedChart from './components/PendingConfirmedChart.vue'
+import RevenueChart from './components/RevenueChart.vue'
+import MonthlyRevenue from './components/MonthlyRevenue.vue'
+import RoomRevenue from './components/RoomRevenue.vue'
+
+// State Variables
+const totalTenants = ref(0)
+const pendingPayments = ref(0)
+const confirmedPayments = ref(0)
+const totalRevenue = ref(0) // Add this line
+
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 0,
+  }).format(value)
+}
+
+// Fetch Total Revenue
+const fetchTotalRevenue = async () => {
+  try {
+    const { data, error } = await supabase.from('payment').select('amount').eq('status', 'approved') // Only count confirmed payments
+
+    if (error) throw error
+
+    // Sum all approved payment amounts
+    totalRevenue.value = data.reduce((sum, payment) => {
+      return sum + (parseFloat(payment.amount) || 0)
+    }, 0)
+
+    console.log('Total Revenue:', totalRevenue.value)
+  } catch (error) {
+    console.error('Error fetching total revenue:', error.message)
+    totalRevenue.value = 0
+  }
+}
+// Fetch Tenants
+const fetchTenants = async () => {
+  try {
+    const { data, error } = await supabase.from('users').select('*').eq('role', 'tenant')
+
+    if (error) throw error
+    totalTenants.value = data.length
+    console.log('Total Tenants:', totalTenants.value)
+  } catch (error) {
+    console.log('Error fetching tenants:', error.message)
+  }
+}
+
+// Fetch Pending Payments
+const fetchPendingPayments = async () => {
+  try {
+    const { data, error } = await supabase.from('payment').select('*').eq('status', 'pending')
+
+    if (error) throw error
+    pendingPayments.value = data.length
+    console.log('Pending Payments:', pendingPayments.value)
+  } catch (error) {
+    console.log('Error fetching pending payments:', error.message)
+  }
+}
+
+// Fetch Confirmed Payments
+const fetchConfirmedPayments = async () => {
+  try {
+    const { data, error } = await supabase.from('payment').select('*').eq('status', 'approved') // Ensure status matches DB
+
+    if (error) throw error
+    confirmedPayments.value = data.length
+    console.log('Confirmed Payments:', confirmedPayments.value)
+  } catch (error) {
+    console.log('Error fetching confirmed payments:', error.message)
+  }
+}
+
+// Lifecycle Hook
+onMounted(() => {
+  fetchTenants()
+  fetchPendingPayments()
+  fetchConfirmedPayments()
+  fetchTotalRevenue()
+})
+</script>
+
 <template>
   <v-container fluid>
     <div class="dashboard-overview mt-6 mb-8">
@@ -9,19 +98,42 @@
 
     <v-row dense>
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="users" value="35" label="Total tenants" />
+        <RouterLink to="tenants"
+          ><StatCard color="white" flat icon="users" :value="totalTenants" label="Total tenants"
+        /></RouterLink>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="clock" value="20" label="Pending payments" />
+        <RouterLink to="reports"
+          ><StatCard
+            color="white"
+            flat
+            icon="clock"
+            :value="pendingPayments"
+            label="Pending payments"
+        /></RouterLink>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="credit-card" value="15" label="Confirmed payments" />
+        <RouterLink to="payments"
+          ><StatCard
+            color="white"
+            flat
+            icon="credit-card"
+            :value="confirmedPayments"
+            label="Confirmed payments"
+        /></RouterLink>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <StatCard color="white" flat icon="chart" value="20,000" label="Total revenue" />
+        <RouterLink to="reports"
+          ><StatCard
+            color="white"
+            flat
+            icon="chart"
+            :value="formatCurrency(totalRevenue)"
+            label="Total revenue"
+        /></RouterLink>
       </v-col>
     </v-row>
 
@@ -31,6 +143,9 @@
         <PendingConfirmedChart color="white" flat />
       </v-col>
       <v-col cols="12" md="6">
+        <RoomRevenue color="white" flat />
+      </v-col>
+      <v-col cols="12">
         <RevenueChart color="white" flat />
       </v-col>
     </v-row>
@@ -41,13 +156,6 @@
     </v-row>
   </v-container>
 </template>
-
-<script setup>
-import StatCard from './components/StatCard.vue'
-import PendingConfirmedChart from './components/PendingConfirmedChart.vue'
-import RevenueChart from './components/RevenueChart.vue'
-import MonthlyRevenue from './components/MonthlyRevenue.vue'
-</script>
 
 <style setup>
 .dashboard-overview {
@@ -70,6 +178,10 @@ import MonthlyRevenue from './components/MonthlyRevenue.vue'
 
 .delay-100 {
   animation-delay: 100ms;
+}
+
+a {
+  text-decoration: none;
 }
 
 @keyframes fadeInUp {

@@ -1,3 +1,24 @@
+<script setup>
+import { ref } from 'vue'
+import { signOut } from '@/api/auth'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+const loading = ref(false)
+
+// Handle Logout
+const handleLogout = async () => {
+  loading.value = true
+  const { success, message } = await signOut()
+  if (success) {
+    router.push('/adminLogin') // Redirect to Admin Login after logout
+  } else {
+    console.error('Logout Failed:', message)
+  }
+  loading.value = false
+}
+</script>
+
 <template>
   <v-app-bar flat color="white" app class="px-4">
     <!-- Logo on the left -->
@@ -19,13 +40,11 @@
         </v-avatar>
       </template>
       <v-list>
-        <v-list-item title="Logout" />
+        <v-btn :loading="loading" @click="handleLogout" color="red" dark> Logout </v-btn>
       </v-list>
     </v-menu>
   </v-app-bar>
 </template>
-
-<script setup></script>
 
 <style scoped>
 .v-app-bar {
